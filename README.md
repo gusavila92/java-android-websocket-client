@@ -76,6 +76,9 @@ This is an example of how you can start a new connection.
 ```
 Next steps
 1. Solve those limitations.
+
 2. Provide a better documentation.
+
 3. Provide a build manager like Maven or Gradle.
+
 4. Publish a .jar into the Maven Repository.

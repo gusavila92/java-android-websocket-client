@@ -75,6 +75,7 @@ This is an example of how you can start a new connection.
         webSocketClient.connect();
 ```
 Next steps
+
 1. Solve those limitations.
 
 2. Provide a better documentation.

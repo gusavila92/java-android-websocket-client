@@ -8,8 +8,7 @@ I have been using this library in my production system without any problems so f
 
 1. Secure WebSocket (WSS) hasn't been tested.
 2. You have to create your own thread to send messages once the handshake is accepted.
-3. It only works in Android by now, because it uses the package android.util.Base64. (I will change this ASAP)
-4. It is not meant to implement the complete WebSocket protocol by now.
+3. It is not meant to implement the complete WebSocket protocol by now.
 
 Cool feature: it implements an automatic reconnection once the connection fails for some reason.
 
@@ -80,9 +79,24 @@ Next steps
 
 2. Provide a better documentation.
 
-3. Provide a build manager like Maven or Gradle.
+3. Publish a .jar into the Maven Repository.
 
-4. Publish a .jar into the Maven Repository.
+## Build
+You need Gradle to build the project. Any version will do.
+```
+gradle build
+```
+
+Then you cand find a ```.jar``` file inside the ```build/libs``` folder
+### Eclipse
+If you want to open the project in Eclipse, just type
+```
+gradle eclipse
+```
+
+and Gradle will automatically generate the source files required to open the project in Eclipse.
+## Minimum requirements
+This libary requires at minimum Java 1.6
 
 ## License
 

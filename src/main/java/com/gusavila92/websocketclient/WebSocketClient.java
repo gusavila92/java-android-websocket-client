@@ -1,6 +1,6 @@
 package com.gusavila92.websocketclient;
 
-import android.util.Base64;
+import org.apache.commons.codec.binary.Base64;
 
 import java.io.BufferedInputStream;
 import java.io.IOException;
@@ -214,7 +214,7 @@ public abstract class WebSocketClient implements Runnable
         Random random = new Random();
         random.nextBytes(key);
 
-        String base64key = Base64.encodeToString(key, Base64.NO_WRAP);
+        String base64key = Base64.encodeBase64String(key);
 
         builder.append("Sec-WebSocket-Key: " + base64key);
         builder.append("\r\n");

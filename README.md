@@ -81,6 +81,21 @@ Next steps
 
 3. Publish a .jar into the Maven Repository.
 
+## Build
+You need Gradle to build the project. Any version will do.
+```
+gradle build
+```
+
+Then you cand find a ```.jar``` file inside the ```build/libs``` folder
+### Eclipse
+If you want to open the project in Eclipse, just type
+```
+gradle eclipse
+```
+
+and Gradle will automatically generate the source files required to open the project in Eclipse.
+
 ## License
 
 Copyright 2017 Gustavo Avila

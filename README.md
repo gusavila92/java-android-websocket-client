@@ -95,6 +95,8 @@ gradle eclipse
 ```
 
 and Gradle will automatically generate the source files required to open the project in Eclipse.
+## Minimum requirements
+This libary requires at minimum Java 1.6
 
 ## License
 

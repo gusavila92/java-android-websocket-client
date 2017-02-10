@@ -530,9 +530,13 @@ public abstract class WebSocketClient implements Runnable {
 			if (payloadLength == 126) {
 				// Attempts to read the next 2 bytes
 				byte[] nextTwoBytes = new byte[2];
-				if (bis.read(nextTwoBytes) < 2) {
-					throw new IOException();
-				}
+				for (int i = 0; i < 2; i++) {
+                    byte b = (byte) bis.read();
+                    if (b == -1) {
+                        throw new IOException();
+                    }
+                    nextTwoBytes[i] = b;
+                }
 
 				// Those last 2 bytes will be interpreted as a 16-bit unsigned
 				// integer
@@ -541,9 +545,13 @@ public abstract class WebSocketClient implements Runnable {
 			} else if (payloadLength == 127) {
 				// Attempts to read the next 8 bytes
 				byte[] nextEightBytes = new byte[8];
-				if (bis.read(nextEightBytes) < 8) {
-					throw new IOException();
-				}
+				for (int i = 0; i < 8; i++) {
+                    byte b = (byte) bis.read();
+                    if (b == -1) {
+                        throw new IOException();
+                    }
+                    nextEightBytes[i] = b;
+                }
 
 				// Only the last 4 bytes matter because Java doesn't support
 				// arrays with more than 2^31 -1 elements, so a 64-bit unsigned
@@ -557,9 +565,13 @@ public abstract class WebSocketClient implements Runnable {
 
 			// Attempts to read the payload data
 			byte[] data = new byte[payloadLength];
-			if (bis.read(data) < payloadLength) {
-				throw new IOException();
-			}
+			for (int i = 0; i < payloadLength; i++) {
+                byte b = (byte) bis.read();
+                if (b == -1) {
+                    throw new IOException();
+                }
+                data[i] = b;
+            }
 
 			// Execute the action depending on the opcode
 			switch (opcode) {

@@ -1,85 +1,84 @@
 # java-websocketclient
 A WebSocket Client library for Java / Android
 
-This library implements the WebSocket protocol as defined in RFC 6455.
-
-It can be used in production under your own risk. It was developed from scratch to solve some well-known problems with the WebSocket library I was using before for an Android project.
-I have been using this library in my production system without any problems so far, but it has some limitations.
-
-1. Secure WebSocket (WSS) hasn't been tested.
-2. You have to create your own thread to send messages once the handshake is accepted.
-3. It is not meant to implement the complete WebSocket protocol by now.
-
-Cool feature: it implements an automatic reconnection once the connection fails for some reason.
-
+This is a very lightweight WebSocket Client library which aims to implement the WebSocket protocol as defined in RFC 6455.
 
 This is an example of how you can start a new connection.
 ```
-        URI uri;
+        private WebSocketClient client;
+	
+	private void createWebSocketClient() {
+		URI uri = null;
+		
+		try {
+			uri = new URI("ws://localhost:8080/test");
+		} catch(URISyntaxException e) {
+			e.printStackTrace();
+		}
+		
+		Map<String, String> map = new HashMap<String, String>();
+		map.put("Origin", "http://www.example.com");
+		
+		client = new WebSocketClient(uri, map) {
 
-        try
-        {
-            uri = new URI("ws://192.168.0.1");
-        }
-        catch (URISyntaxException e)
-        {
-            uri = null;
-        }
+			@Override
+			public void onOpen() {
+				System.out.println("open");
+			}
 
-        webSocketClient = new WebSocketClient(uri, 5000)
-        {
-            @Override
-            public void onOpen()
-            {
-                
-            }
+			@Override
+			public void onTextReceived(String message) {
+				System.out.println(message);
+			}
 
-            @Override
-            public void onTextReceived(String message)
-            {
-               
-            }
+			@Override
+			public void onBinaryReceived(byte[] data) {
+				System.out.println("binary");
+			}
 
-            @Override
-            public void onBinaryReceived(byte[] data)
-            {
+			@Override
+			public void onPingReceived(byte[] data) {
+				System.out.println("ping");
+			}
 
-            }
+			@Override
+			public void onPongReceived() {
+				System.out.println("pong");
+			}
 
-            @Override
-            public void onPingReceived(byte[] data)
-            {
+			@Override
+			public void onException(Exception e) {
+				System.out.println(e.getMessage());
+			}
 
-            }
-
-            @Override
-            public void onPongReceived()
-            {
-
-            }
-
-            @Override
-            public void onDisconnect(IOException exception)
-            {
-                
-            }
-
-            @Override
-            public void onClose()
-            {
-                
-            }
-        };
-
-        webSocketClient.connect();
+			@Override
+			public void onCloseReceived() {
+				System.out.println("close");
+			}
+		};
+		
+		client.connect();
+		
+		client.send("sample message");
+	}
 ```
-Next steps
+If you don't specify a port into the URI, the default port will be 80 for *ws* and 443 for *wss*.
 
-1. Solve those limitations.
+This is the list of the default HTTP Headers that will be included into the WebSocket client handshake
+- Host
+- Upgrade
+- Connection
+- Sec-WebSocket-Key
+- Sec-WebSocket-Version
 
-2. Provide a better documentation.
+If you wish to include more headers, like *Origin*, you can pass a *Map* to the constructor; otherwise, just pass *null*.
 
-3. Publish a .jar into the Maven Repository.
+When an Exception occurs, the library calls onException and automatically closes the socket.
+
+When you are finished using the WebSocket, you can call ```client.close()``` to close the connection.
+
+## ws and wss
+This library supports secure and insecure WebSockets. You just need to define the scheme as *wss* or *ws* (case-sensitive) into the URI.
 
 ## Build
 You need Gradle to build the project. Any version will do.
@@ -96,7 +95,7 @@ gradle eclipse
 
 and Gradle will automatically generate the source files required to open the project in Eclipse.
 ## Minimum requirements
-This libary requires at minimum Java 1.6
+This libary requires at minimum Java 1.6 or Android 1.6 (API 4)
 
 ## License
 

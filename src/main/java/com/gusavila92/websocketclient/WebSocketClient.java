@@ -2,27 +2,29 @@ package com.gusavila92.websocketclient;
 
 import org.apache.commons.codec.binary.Base64;
 
+import com.gusavila92.websocketclient.common.Utils;
+import com.gusavila92.websocketclient.exceptions.UnknownOpcodeException;
+import com.gusavila92.websocketclient.exceptions.IllegalSchemeException;
+import com.gusavila92.websocketclient.model.Payload;
+
 import java.io.BufferedInputStream;
+import java.io.BufferedOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.UnsupportedEncodingException;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
+import java.nio.charset.Charset;
 import java.security.SecureRandom;
+import java.util.LinkedList;
+import java.util.Map;
 import java.util.Random;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
-public abstract class WebSocketClient implements Runnable
-{
-    //-------------------------------------------------------------------------------------------
-    // Constants
-    // ------------------------------------------------------------------------------------------
-
+public abstract class WebSocketClient implements Runnable {
+	// All supported opcodes
     private static final int OPCODE_CONTINUATION = 0x0;
     private static final int OPCODE_TEXT = 0x1;
     private static final int OPCODE_BINARY = 0x2;
@@ -30,147 +32,254 @@ public abstract class WebSocketClient implements Runnable
     private static final int OPCODE_PING = 0x9;
     private static final int OPCODE_PONG = 0xA;
 
-    private URI uri;
-    private long reconnectionPeriod;
-
-    private Socket socket;
-
-    private boolean isClosed;
-
-    //-------------------------------------------------------------------------------------------
-    // Constructor
-    // ------------------------------------------------------------------------------------------
-
-    public WebSocketClient(URI uri, long reconnectionPeriod)
-    {
-        this.uri = uri;
-        this.reconnectionPeriod = reconnectionPeriod;
-
-        isClosed = false;
-    }
-
-    //-------------------------------------------------------------------------------------------
-    // Abstract methods
-    // ------------------------------------------------------------------------------------------
-
-    public abstract void onOpen();
-
-    public abstract void onTextReceived(String message);
-
-    public abstract void onBinaryReceived(byte[] data);
-
-    public abstract void onPingReceived(byte[] data);
-
-    public abstract void onPongReceived();
-
-    public abstract void onDisconnect(IOException exception);
-
-    public abstract void onClose();
-
-    //-------------------------------------------------------------------------------------------
-    // Public methods
-    // ------------------------------------------------------------------------------------------
+    /**
+     * Connection URI
+     */
+    private final URI uri;
+    
+    /**
+     * Custom headers to be included into the handshake
+     */
+    private final Map<String, String> headers;
+    
+    /**
+     * The writer thread
+     */
+    private final Thread writerThread;
+    
+    /**
+     * Flag indicating if there are pending changes waiting to be read by the writer thread
+     * It is used to avoid a missed signal between threads
+     */
+    private volatile boolean pendingMessages;
+    
+    /**
+     * The data waiting to be read from the writer thread
+     */
+    private final LinkedList<Payload> outBuffer;
+    
+    /**
+     * Cryptographically secure random generator used for the masking key 
+     */
+    private final SecureRandom secureRandom;
 
     /**
-     * Start a new connection
+     * Socket for the underlying connection
      */
-    public void connect()
-    {
-        Thread thread = new Thread(this);
+    private Socket socket;
+    
+    /**
+     * The socket input stream
+     */
+    private BufferedInputStream bis;
+    
+    /**
+     * The socket output stream
+     */
+    private BufferedOutputStream bos;
+
+    /**
+     * Initialize all the variables
+     * 
+     * @param uri
+     * @param headers
+     */
+    public WebSocketClient(URI uri, Map<String, String> headers) {
+    	this.uri = uri;
+    	this.headers = headers;
+    	this.pendingMessages = false;
+    	this.outBuffer = new LinkedList<Payload>();
+    	this.secureRandom = new SecureRandom();
+    	
+    	this.writerThread = new Thread(new Runnable() {
+			@Override
+			public void run() {
+				synchronized (this) {
+					while (true) {
+						if (!pendingMessages) {
+							try {
+								wait();
+							} catch(InterruptedException e) {
+								// This should never happen
+							}
+						}
+						
+						pendingMessages = false;
+						
+						if (socket.isClosed()) {
+							return;
+						} else {
+							while (outBuffer.size() > 0) {
+								Payload payload = outBuffer.poll();
+								int opcode = payload.getOpcode();
+								byte[] data = payload.getData();
+								
+								try {
+									send(opcode, data);
+								} catch (IOException e) {
+									// Reader thread will notify this exception
+									// This thread just need to stop
+									return;
+								}
+							}
+						}
+					}
+				}
+			}
+        });
+    }
+
+    /**
+     * Called when the WebSocket handshake has been accepted and the WebSocket
+     * is ready to send and receive data
+     */
+    public abstract void onOpen();
+
+    /**
+     * Called when a text message has been received
+     * 
+     * @param message
+     */
+    public abstract void onTextReceived(String message);
+
+    /**
+     * Called when a binary message has been received
+     * 
+     * @param data
+     */
+    public abstract void onBinaryReceived(byte[] data);
+
+    /**
+     * Called when a ping message has been received
+     * 
+     * @param data
+     */
+    public abstract void onPingReceived(byte[] data);
+
+    /**
+     * Called when a pong message has been received
+     */
+    public abstract void onPongReceived();
+
+    /**
+     * Called when an exception has occurred
+     * It it usually called on an IOException to indicate a connection error
+     * 
+     * @param e
+     */
+    public abstract void onException(Exception e);
+
+    /**
+     * Called when a close code has been received
+     */
+    public abstract void onCloseReceived();
+
+    /**
+     * Starts a new WebSocket connection
+     */
+    public void connect() {
+    	Thread thread = new Thread(this);
         thread.start();
     }
 
     /**
-     * Send a string message
+     * Sends a text message
+     * 
      * @param message
      */
-    public void send(String message)
-    {
-        byte[] payload = null;
-        try
-        {
-            payload = message.getBytes("UTF-8");
-        }
-        catch (UnsupportedEncodingException e)
-        {
-            e.printStackTrace();
-        }
-
-        send(OPCODE_TEXT, payload);
+    public void send(String message) {
+    	byte[] data = message.getBytes(Charset.forName("UTF-8"));
+        final Payload payload = new Payload(OPCODE_TEXT, data);
+        
+    	new Thread(new Runnable() {
+			@Override
+			public void run() {
+		        synchronized (writerThread) {
+		        	outBuffer.add(payload);
+		        	pendingMessages = true;
+		        	writerThread.notify();
+		        }
+			}
+    	}).start();
     }
 
     /**
-     * Send a binary message
-     * @param payload
+     * Sends a binary message
+     * 
+     * @param data
      */
-    public void send(byte[] payload)
-    {
-        send(OPCODE_BINARY, payload);
+    public void send(byte[] data) {
+    	final Payload payload = new Payload(OPCODE_BINARY, data);
+    	
+    	new Thread(new Runnable() {
+			@Override
+			public void run() {
+		        synchronized (writerThread) {
+		        	outBuffer.add(payload);
+		        	pendingMessages = true;
+		        	writerThread.notify();
+		        }
+			}
+    	}).start();
+    }
+    
+    public void close() {
+    	new Thread(new Runnable() {
+			@Override
+			public void run() {
+				closeInternal();
+			}
+    		
+    	}).start();
     }
 
     /**
-     * Close the WebSocket
-     */
-    public void close()
-    {
-        try
-        {
-            isClosed = true;
-
-            if(socket != null)
-                socket.close();
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-        }
-    }
-
-    //-------------------------------------------------------------------------------------------
-    // Private methods
-    // ------------------------------------------------------------------------------------------
-
-    private void createSocket() throws IOException
-    {
-        if(uri.getScheme().equals("ws"))
-        {
-            SocketFactory socketFactory = SocketFactory.getDefault();
-            socket = socketFactory.createSocket();
-        }
-        else if(uri.getScheme().equals("wss"))
-        {
-            SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
-            socket = socketFactory.createSocket();
-        }
-    }
-
-    /**
-     * Start the connection
+     * Creates a TCP socket for the underlying connection
+     * 
      * @throws IOException
      */
-    private void startConnection() throws IOException
-    {
-        if(socket instanceof SSLSocket)
-        {
-            if(uri.getPort() == -1)
-                socket.connect(new InetSocketAddress(uri.getHost(), 443));
-            else
-                socket.connect(new InetSocketAddress(uri.getHost(), uri.getPort()));
-        }
-        else
-        {
-            if(uri.getPort() == -1)
-                socket.connect(new InetSocketAddress(uri.getHost(), 80));
-            else
-                socket.connect(new InetSocketAddress(uri.getHost(), uri.getPort()));
-        }
+    private void createSocket() throws IOException {
+    	String scheme = uri.getScheme();
+    	if (scheme != null) {
+    		if (scheme.equals("ws")) {
+                SocketFactory socketFactory = SocketFactory.getDefault();
+                socket = socketFactory.createSocket();
+            } else if (scheme.equals("wss")) {
+                SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+                socket = socketFactory.createSocket();
+            } else {
+            	throw new IllegalSchemeException("The scheme component of the URI should be ws or wss");
+            }
+    	} else {
+    		throw new IllegalSchemeException("The scheme component of the URI cannot be null");
+    	}
+    }
+
+    /**
+     * Starts the WebSocket connection
+     * 
+     * @throws IOException
+     */
+    private void startConnection() throws IOException {
+    	int port = uri.getPort();
+    	if (port != -1) {
+    		socket.connect(new InetSocketAddress(uri.getHost(), port));
+    	} else if (socket instanceof SSLSocket) {
+    		socket.connect(new InetSocketAddress(uri.getHost(), 443));
+    	} else {
+    		socket.connect(new InetSocketAddress(uri.getHost(), 80));
+    	}
+    	
+    	bis = new BufferedInputStream(socket.getInputStream(), 65536);
+    	bos = new BufferedOutputStream(socket.getOutputStream(), 65536);
 
         byte[] handshake = createHandshake();
-        OutputStream outputStream = socket.getOutputStream();
-        outputStream.write(handshake);
-        outputStream.flush();
+        bos.write(handshake);
+        bos.flush();
 
         verifyServerHandshake();
+        
+        writerThread.start();
 
         onOpen();
 
@@ -178,30 +287,34 @@ public abstract class WebSocketClient implements Runnable
     }
 
     /**
-     * Create and return a byte array containing the handshake
+     * Creates and returns a byte array containing the client handshake
+     * 
      * @return
      */
-    private byte[] createHandshake()
-    {
+    private byte[] createHandshake() {
         StringBuilder builder = new StringBuilder();
 
         String path = uri.getRawPath();
         String query = uri.getRawQuery();
 
         String requestUri;
-        if(query == null)
+        if (query == null) {
             requestUri = path;
-        else
+        } else {
             requestUri = path + "?" + query;
+        }
 
         builder.append("GET " + requestUri + " HTTP/1.1");
         builder.append("\r\n");
 
-        if(uri.getPort() == -1)
-            builder.append("Host: " + uri.getHost());
-        else
-            builder.append("Host: " + uri.getHost() + ":" + uri.getPort());
-
+        String host;
+        if (uri.getPort() == -1) {
+        	host = uri.getHost();
+        } else {
+        	host = uri.getHost() + ":" + uri.getPort();
+        }
+        
+        builder.append("Host: " + host);
         builder.append("\r\n");
 
         builder.append("Upgrade: websocket");
@@ -213,7 +326,6 @@ public abstract class WebSocketClient implements Runnable
         byte[] key = new byte[16];
         Random random = new Random();
         random.nextBytes(key);
-
         String base64key = Base64.encodeBase64String(key);
 
         builder.append("Sec-WebSocket-Key: " + base64key);
@@ -221,268 +333,252 @@ public abstract class WebSocketClient implements Runnable
 
         builder.append("Sec-WebSocket-Version: 13");
         builder.append("\r\n");
+        
+        if (headers != null) {
+        	for (Map.Entry<String, String> entry : headers.entrySet()) {
+            	builder.append(entry.getKey() + ": " + entry.getValue());
+            	builder.append("\r\n");
+            }
+        }
+        
         builder.append("\r\n");
 
         String handshake = builder.toString();
-
-        try
-        {
-            return handshake.getBytes("ASCII");
-        }
-        catch (UnsupportedEncodingException e)
-        {
-            return null;
-        }
+        return handshake.getBytes(Charset.forName("ASCII"));
     }
+    
+    /**
+    * Verifies the validity of the server handshake
+    * 
+    * @throws IOException
+    */
+   private void verifyServerHandshake() throws IOException {   
+       byte[] buffer = new byte[8192];
+       int quantity = bis.read(buffer);
+       
+       if (quantity == -1) {
+    	   throw new IOException();
+       } else {
+    	   byte[] handshake = new byte[quantity];
+    	   for (int i = 0; i < quantity; i++) {
+    		   handshake[i] = buffer[i];
+    	   }
+    	   
+    	   // To be implemented
+       }
+   }
 
-    private void send(int opcode, byte[] payload)
-    {
+    /**
+     * Sends a message given an opcode and a payload
+     * 
+     * @param opcode
+     * @param payload
+     * @throws IOException
+     */
+    private void send(int opcode, byte[] payload) throws IOException {
+    	// The position of the data frame in which the next portion of code
+    	// will start writing bytes
         int nextPosition;
-
+        
+        // The data frame
         byte[] frame;
-        if(payload.length < 126)
-            frame = new byte[6 + payload.length];
-        else if(payload.length < 65536)
-            frame = new byte[8 + payload.length];
-        else
-            frame = new byte[14 + payload.length];
-
-        frame[0] = (byte) (-128 | opcode);
-
-        if(payload.length < 126)
-        {
-            frame[1] = (byte) (-128 | payload.length);
+        
+        // The length of the payload data
+        int length = payload.length;
+        
+        if (length < 126) {
+        	// If payload length is less than 126,
+        	// the frame must have the first two bytes, plus 4 bytes for the masking key
+        	// plus the length of the payload
+        	frame = new byte[6 + length];
+        	
+        	// The first two bytes
+            frame[0] = (byte) (-128 | opcode);
+            frame[1] = (byte) (-128 | length);
+            
+            // The masking key will start at position 2
             nextPosition = 2;
+        } else if (length < 65536) {
+        	// If payload length is greater than 126 and less than 65536,
+        	// the frame must have the first two bytes, plus 2 bytes for the extended payload length,
+        	// plus 4 bytes for the masking key, plus the length of the payload
+            frame = new byte[8 + length];
+            
+            // The first two bytes
+            frame[0] = (byte) (-128 | opcode);
+            frame[1] = -2;
+            
+            // Puts the length into the data frame
+            byte[] array = Utils.to2ByteArray(length);
+            frame[2] = array[0];
+            frame[3] = array[1];
+            
+            // The masking key will start at position 4
+            nextPosition = 4;
+        } else {
+        	// If payload length is greater or equal than 65536,
+        	// the frame must have the first two bytes, plus 8 bytes for the extended payload length,
+        	// plus 4 bytes for the masking key, plus the length of the payload
+        	frame = new byte[14 + length];
+        	
+        	// The first two bytes
+            frame[0] = (byte) (-128 | opcode);
+        	frame[1] = -1;
+        	
+        	// Puts the length into the data frame
+        	byte[] array = Utils.to8ByteArray(length);
+            frame[2] = array[0];
+            frame[3] = array[1];
+            frame[4] = array[2];
+            frame[5] = array[3];
+            frame[6] = array[4];
+            frame[7] = array[5];
+            frame[8] = array[6];
+            frame[9] = array[7];
+            
+            // The masking key will start at position 10
+            nextPosition = 10;
         }
-        else
-        {
-            frame[1] = 126;
 
-            if(payload.length < 65536)
-            {
-                byte[] d = to2ByteArray(payload.length);
-                frame[2] = d[0];
-                frame[3] = d[1];
-                nextPosition = 4;
-            }
-            else
-            {
-                byte[] a = to2ByteArray(127);
-                frame[2] = a[0];
-                frame[3] = a[1];
-
-                byte[] d = to8ByteArray(payload.length);
-                frame[4] = d[0];
-                frame[5] = d[1];
-                frame[6] = d[2];
-                frame[7] = d[3];
-                frame[8] = d[4];
-                frame[9] = d[5];
-                frame[10] = d[6];
-                frame[11] = d[7];
-                nextPosition = 12;
-            }
-        }
-
+        // Generate a random 4-byte masking key
         byte[] mask = new byte[4];
-        SecureRandom secureRandom = new SecureRandom();
         secureRandom.nextBytes(mask);
 
+        // Puts the masking key into the data frame
         frame[nextPosition] = mask[0];
         frame[nextPosition + 1] = mask[1];
         frame[nextPosition + 2] = mask[2];
         frame[nextPosition + 3] = mask[3];
         nextPosition += 4;
 
-        for(int i = 0; i < payload.length; i++)
-        {
+        // Puts the masked payload data into the data frame
+        for (int i = 0; i < length; i++) {
             frame[nextPosition] = ((byte) (payload[i] ^ mask[i % 4]));
             nextPosition++;
         }
-
-        try
-        {
-            if(socket != null)
-            {
-                OutputStream outputStream = socket.getOutputStream();
-                outputStream.write(frame);
-                outputStream.flush();
-            }
-        }
-        catch (IOException e)
-        {
-            e.printStackTrace();
-        }
+        
+        // Sends the data frame
+        bos.write(frame);
+        bos.flush();
     }
 
     /**
      * Listen for changes coming from the WebSocket
+     * 
      * @throws IOException
      */
-    private void read() throws IOException
-    {
-        BufferedInputStream bufferedInputStream = new BufferedInputStream(socket.getInputStream(), 65536);
-
+    private void read() throws IOException {
+        // The first byte of every data frame
         int firstByte;
-        while((firstByte = bufferedInputStream.read()) != -1)
-        {
-            int fin = (firstByte << 24) >>> 31;
-            int rsv1 = (firstByte << 25) >>> 31;
-            int rsv2 = (firstByte << 26) >>> 31;
-            int rsv3 = (firstByte << 27) >>> 31;
+        
+        // Loop until there are not more data to be read from the InputStream
+        while ((firstByte = bis.read()) != -1) {
+        	// Data contained in the first byte
+            // int fin = (firstByte << 24) >>> 31;
+            // int rsv1 = (firstByte << 25) >>> 31;
+            // int rsv2 = (firstByte << 26) >>> 31;
+            // int rsv3 = (firstByte << 27) >>> 31;
             int opcode = (firstByte << 28) >>> 28;
 
-            int secondByte = bufferedInputStream.read();
+            // Reads the second byte
+            int secondByte = bis.read();
+            if (secondByte == -1) {
+            	throw new IOException();
+            }
 
-            int mask = (secondByte << 24) >>> 31;
+            // Data contained in the second byte
+            // int mask = (secondByte << 24) >>> 31;
             int payloadLength = (secondByte << 25) >>> 25;
 
-            if(payloadLength == 126)
-            {
-                int thirdByte = bufferedInputStream.read();
-                int fourthByte = bufferedInputStream.read();
+            // If the length of payload data is less than 126, that's the final payload length
+            // Otherwise, it must be calculated as follows
+            if (payloadLength == 126) {
+            	// Attempts to read the next 2 bytes
+            	byte[] nextTwoBytes = new byte[2];
+            	if (bis.read(nextTwoBytes) < 2) {
+            		throw new IOException();
+            	}
 
-                byte[] b1 = new byte[]{0, 0, (byte)thirdByte, (byte)fourthByte};
-                payloadLength = fromByteArray(b1);
+            	// Those last 2 bytes will be interpreted as a 16-bit unsigned integer
+                byte[] integer = new byte[]{0, 0, nextTwoBytes[0], nextTwoBytes[1]};
+                payloadLength = Utils.fromByteArray(integer);
+            } else if (payloadLength == 127) {
+            	// Attempts to read the next 8 bytes
+            	byte[] nextEightBytes = new byte[8];
+            	if (bis.read(nextEightBytes) < 8) {
+            		throw new IOException();
+            	}
+
+            	// Only the last 4 bytes matter because Java doesn't support
+            	// arrays with more than 2^31 -1 elements, so a 64-bit unsigned integer cannot be processed
+            	// Those last 4 bytes will be interpreted as a 32-bit unsigned integer
+                byte[] integer = new byte[]{nextEightBytes[4], nextEightBytes[5], nextEightBytes[6], nextEightBytes[7]};
+                payloadLength = Utils.fromByteArray(integer);
             }
-            else if(payloadLength == 127)
-            {
-                int fifthByte = bufferedInputStream.read();
-                int sixthByte = bufferedInputStream.read();
-                int seventhByte = bufferedInputStream.read();
-                int eightByte = bufferedInputStream.read();
-                int ninethByte = bufferedInputStream.read();
-                int tenthByte = bufferedInputStream.read();
-                int eleventhByte = bufferedInputStream.read();
-                int twelfthByte = bufferedInputStream.read();
-
-                byte[] b2 = new byte[]{(byte)ninethByte, (byte)tenthByte, (byte)eleventhByte, (byte)twelfthByte};
-                payloadLength = fromByteArray(b2);
-            }
-
+            
+            // Attempts to read the payload data
             byte[] data = new byte[payloadLength];
-            for(int i = 0; i < payloadLength; i++)
-                data[i] = (byte) bufferedInputStream.read();
-
-            if(opcode == OPCODE_TEXT)
-                onTextReceived(new String(data, "UTF-8"));
-            else if(opcode == OPCODE_BINARY)
-                onBinaryReceived(data);
-            else if(opcode == OPCODE_CLOSE)
-                onClose();
-            else if(opcode == OPCODE_PING)
-                onPingReceived(data);
-            else if(opcode == OPCODE_PONG)
-                onPongReceived();
+            if (bis.read(data) < payloadLength) {
+            	throw new IOException();
+            }
+            
+            // Execute the action depending on the opcode
+            switch (opcode) {
+            case OPCODE_CONTINUATION:
+            	//Should be implemented
+            	break;
+            case OPCODE_TEXT:
+            	onTextReceived(new String(data, Charset.forName("UTF-8")));
+            	break;
+            case OPCODE_BINARY:
+            	onBinaryReceived(data);
+            	break;
+            case OPCODE_CLOSE:
+            	closeInternal();
+            	onCloseReceived();
+            	return;
+            case OPCODE_PING:
+            	onPingReceived(data);
+            	break;
+            case OPCODE_PONG:
+            	onPongReceived();
+            	break;
+            default:
+            	closeInternal();
+            	Exception e = new UnknownOpcodeException("Unknown opcode: 0x" + Integer.toHexString(opcode));
+            	onException(e);
+            	return;
+            }
         }
 
+        // If there are not more data to be read,
+        // and if the connection didn't receive a close frame,
+        // an IOException must be thrown because the connection didn't close gracefully
         throw new IOException();
     }
-
-    /**
-     * Convert the int value to a 2 byte array
-     * @param value
-     * @return
-     */
-    private static byte[] to2ByteArray(int value)
-    {
-        return new byte[] {
-                (byte) (value >>> 8),
-                (byte) value};
-    }
-
-    /**
-     * Convert the int value to a 8 byte array
-     * @param value
-     * @return
-     */
-    private static byte[] to8ByteArray(int value)
-    {
-        return new byte[] {
-                (byte) (value >>> 56),
-                (byte) (value >>> 48),
-                (byte) (value >>> 40),
-                (byte) (value >>> 32),
-                (byte) (value >>> 24),
-                (byte) (value >>> 16),
-                (byte) (value >>> 8),
-                (byte) value};
-    }
-
-    /**
-     * Convert the byte array to an integer
-     * @param bytes
-     * @return
-     */
-    private static int fromByteArray(byte[] bytes)
-    {
-        return bytes[0] << 24 | (bytes[1] & 0xFF) << 16 | (bytes[2] & 0xFF) << 8 | (bytes[3] & 0xFF);
-    }
-
-    /**
-     * Try to reconnect automatically to the WebSocket
-     */
-    private void reconnect()
-    {
-        try
-        {
-            Thread.sleep(reconnectionPeriod);
-            createSocket();
-            startConnection();
-        }
-        catch (InterruptedException e)
-        {
-            e.printStackTrace();
-        }
-        catch (IOException e)
-        {
-            if(!isClosed)
-            {
-                onDisconnect(e);
-                reconnect();
-            }
-        }
-    }
-
-    /**
-     *
-     * @throws IOException
-     */
-    private void verifyServerHandshake() throws IOException
-    {
-        InputStream inputStream = socket.getInputStream();
-
-        byte[] buffer = new byte[8192];
-        int quantity = inputStream.read(buffer);
-
-        if(quantity == -1)
-            throw new IOException();
-        else
-        {
-            byte[] serverHandshake = new byte[quantity];
-
-            for(int i = 0; i < quantity; i++)
-            {
-                serverHandshake[i] = buffer[i];
-            }
-        }
+    
+    private void closeInternal() {
+    	try {
+    		synchronized (writerThread) {
+    			if (!socket.isClosed()) {
+    				socket.close();
+    				pendingMessages = true;
+	    			writerThread.notify();
+    			}
+    		}
+    	} catch (IOException e) {
+    		// This should never happen
+    	}
     }
 
     @Override
-    public void run()
-    {
-        try
-        {
+    public void run() {
+        try {
             createSocket();
             startConnection();
-        }
-        catch (IOException e)
-        {
-            if(!isClosed)
-            {
-                onDisconnect(e);
-                reconnect();
-            }
+        } catch (Exception e) {
+        	closeInternal();
+        	onException(e);
         }
     }
 }

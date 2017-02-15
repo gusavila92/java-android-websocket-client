@@ -20,7 +20,6 @@ import java.util.Map;
 import java.util.Random;
 
 import javax.net.SocketFactory;
-import javax.net.ssl.SSLSocket;
 import javax.net.ssl.SSLSocketFactory;
 
 public abstract class WebSocketClient implements Runnable {
@@ -52,6 +51,12 @@ public abstract class WebSocketClient implements Runnable {
 	 * writer thread It is used to avoid a missed signal between threads
 	 */
 	private volatile boolean pendingMessages;
+	
+	/**
+     * Flag indicating if the close method was called before establishing a connection
+     * If this is true, a connection will never be established
+     */
+    private volatile boolean isClosed;
 
 	/**
 	 * The data waiting to be read from the writer thread
@@ -93,6 +98,7 @@ public abstract class WebSocketClient implements Runnable {
 		this.uri = uri;
 		this.headers = headers;
 		this.pendingMessages = false;
+		this.isClosed = false;
 		this.outBuffer = new LinkedList<Payload>();
 		this.secureRandom = new SecureRandom();
 		this.lock = new Object();
@@ -256,8 +262,10 @@ public abstract class WebSocketClient implements Runnable {
 	 */
 	private void connect() {
 		try {
-			createSocket();
-			startConnection();
+			boolean success = createAndConnectTCPSocket();
+            if (success) {
+                startConnection();
+            }
 		} catch (Exception e) {
 			closeInternal();
 			onException(e);
@@ -265,26 +273,48 @@ public abstract class WebSocketClient implements Runnable {
 	}
 
 	/**
-	 * Creates a TCP socket for the underlying connection
-	 *
-	 * @throws IOException
-	 */
-	private void createSocket() throws IOException {
-		String scheme = uri.getScheme();
-		if (scheme != null) {
-			if (scheme.equals("ws")) {
-				SocketFactory socketFactory = SocketFactory.getDefault();
-				socket = socketFactory.createSocket();
-			} else if (scheme.equals("wss")) {
-				SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
-				socket = socketFactory.createSocket();
-			} else {
-				throw new IllegalSchemeException("The scheme component of the URI should be ws or wss");
-			}
-		} else {
-			throw new IllegalSchemeException("The scheme component of the URI cannot be null");
-		}
-	}
+     * Creates and connects a TCP socket for the underlying connection
+     *
+     * @return true is the socket was succesfully connected, false otherwise
+     * @throws IOException
+     */
+    private boolean createAndConnectTCPSocket() throws IOException {
+        synchronized (lock) {
+            if (!isClosed) {
+                String scheme = uri.getScheme();
+                int port = uri.getPort();
+                if (scheme != null) {
+                    if (scheme.equals("ws")) {
+                        SocketFactory socketFactory = SocketFactory.getDefault();
+                        socket = socketFactory.createSocket();
+
+                        if (port != -1) {
+                            socket.connect(new InetSocketAddress(uri.getHost(), port));
+                        } else {
+                            socket.connect(new InetSocketAddress(uri.getHost(), 80));
+                        }
+                    } else if (scheme.equals("wss")) {
+                        SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+                        socket = socketFactory.createSocket();
+
+                        if (port != -1) {
+                            socket.connect(new InetSocketAddress(uri.getHost(), port));
+                        } else {
+                            socket.connect(new InetSocketAddress(uri.getHost(), 443));
+                        }
+                    } else {
+                        throw new IllegalSchemeException("The scheme component of the URI should be ws or wss");
+                    }
+                } else {
+                    throw new IllegalSchemeException("The scheme component of the URI cannot be null");
+                }
+
+                return true;
+            }
+
+            return false;
+        }
+    }
 
 	/**
 	 * Starts the WebSocket connection
@@ -292,15 +322,6 @@ public abstract class WebSocketClient implements Runnable {
 	 * @throws IOException
 	 */
 	private void startConnection() throws IOException {
-		int port = uri.getPort();
-		if (port != -1) {
-			socket.connect(new InetSocketAddress(uri.getHost(), port));
-		} else if (socket instanceof SSLSocket) {
-			socket.connect(new InetSocketAddress(uri.getHost(), 443));
-		} else {
-			socket.connect(new InetSocketAddress(uri.getHost(), 80));
-		}
-
 		bis = new BufferedInputStream(socket.getInputStream(), 65536);
 		bos = new BufferedOutputStream(socket.getOutputStream(), 65536);
 
@@ -612,12 +633,15 @@ public abstract class WebSocketClient implements Runnable {
 	private void closeInternal() {
 		try {
 			synchronized (lock) {
-				if (!socket.isClosed()) {
-					socket.close();
-					pendingMessages = true;
-					lock.notify();
-				}
-			}
+                if (!isClosed) {
+                    if (socket != null) {
+                        socket.close();
+                        pendingMessages = true;
+                        lock.notify();
+                    }
+                    isClosed = true;
+                }
+            }
 		} catch (IOException e) {
 			// This should never happen
 		}

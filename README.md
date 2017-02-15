@@ -16,10 +16,10 @@ This is an example of how you can start a new connection.
 			e.printStackTrace();
 		}
 		
-		Map<String, String> map = new HashMap<String, String>();
-		map.put("Origin", "http://www.example.com");
+		Map<String, String> handshakeHeaders = new HashMap<String, String>();
+		handshakeHeaders.put("Origin", "http://www.example.com");
 		
-		client = new WebSocketClient(uri, map) {
+		client = new WebSocketClient(uri, handshakeHeaders) {
 
 			@Override
 			public void onOpen() {

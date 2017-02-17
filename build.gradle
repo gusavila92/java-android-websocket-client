@@ -5,17 +5,5 @@ repositories {
     mavenCentral()
 }
 
-jar {
-    from {
-        configurations.compile.collect {
-            it.isDirectory() ? it : zipTree(it)
-        }
-    }
-}
-
 sourceCompatibility = 1.6
 targetCompatibility = 1.6
-
-dependencies {
-    compile group: 'commons-codec', name: 'commons-codec', version: '1.10'
-}

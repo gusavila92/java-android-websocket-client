@@ -1,15 +1,25 @@
 package com.gusavila92.websocketclient;
 
-import org.apache.commons.codec.binary.Base64;
-
+import com.gusavila92.apache.commons.codec.binary.Base64;
+import com.gusavila92.apache.commons.codec.digest.DigestUtils;
+import com.gusavila92.apache.http.Header;
+import com.gusavila92.apache.http.HttpException;
+import com.gusavila92.apache.http.HttpResponse;
+import com.gusavila92.apache.http.StatusLine;
+import com.gusavila92.apache.http.impl.io.DefaultHttpResponseParser;
+import com.gusavila92.apache.http.impl.io.HttpTransportMetricsImpl;
+import com.gusavila92.apache.http.impl.io.SessionInputBufferImpl;
+import com.gusavila92.apache.http.io.HttpMessageParser;
 import com.gusavila92.websocketclient.common.Utils;
 import com.gusavila92.websocketclient.exceptions.UnknownOpcodeException;
 import com.gusavila92.websocketclient.exceptions.IllegalSchemeException;
+import com.gusavila92.websocketclient.exceptions.InvalidServerHandshakeException;
 import com.gusavila92.websocketclient.model.Payload;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
 import java.io.IOException;
+import java.io.InputStream;
 import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
@@ -22,7 +32,10 @@ import java.util.Random;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
-public abstract class WebSocketClient implements Runnable {
+public abstract class WebSocketClient {
+	// GUID for Sec-WebSocket-Accept
+	private static final String GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
+	
 	// All supported opcodes
 	private static final int OPCODE_CONTINUATION = 0x0;
 	private static final int OPCODE_TEXT = 0x1;
@@ -322,28 +335,35 @@ public abstract class WebSocketClient implements Runnable {
 	 * @throws IOException
 	 */
 	private void startConnection() throws IOException {
-		bis = new BufferedInputStream(socket.getInputStream(), 65536);
 		bos = new BufferedOutputStream(socket.getOutputStream(), 65536);
 
-		byte[] handshake = createHandshake();
+		byte[] key = new byte[16];
+		Random random = new Random();
+		random.nextBytes(key);
+		String base64Key = Base64.encodeBase64String(key);
+		
+		byte[] handshake = createHandshake(base64Key);
 		bos.write(handshake);
 		bos.flush();
-
-		verifyServerHandshake();
+		
+		InputStream inputStream = socket.getInputStream();
+		verifyServerHandshake(inputStream, base64Key);
 
 		writerThread.start();
 
 		onOpen();
 
+		bis = new BufferedInputStream(socket.getInputStream(), 65536);
 		read();
 	}
 
 	/**
 	 * Creates and returns a byte array containing the client handshake
 	 *
+	 * @param base64Key
 	 * @return
 	 */
-	private byte[] createHandshake() {
+	private byte[] createHandshake(String base64Key) {
 		StringBuilder builder = new StringBuilder();
 
 		String path = uri.getRawPath();
@@ -375,12 +395,7 @@ public abstract class WebSocketClient implements Runnable {
 		builder.append("Connection: Upgrade");
 		builder.append("\r\n");
 
-		byte[] key = new byte[16];
-		Random random = new Random();
-		random.nextBytes(key);
-		String base64key = Base64.encodeBase64String(key);
-
-		builder.append("Sec-WebSocket-Key: " + base64key);
+		builder.append("Sec-WebSocket-Key: " + base64Key);
 		builder.append("\r\n");
 
 		builder.append("Sec-WebSocket-Version: 13");
@@ -402,21 +417,70 @@ public abstract class WebSocketClient implements Runnable {
 	/**
 	 * Verifies the validity of the server handshake
 	 *
+	 * @param inputStream
+	 * @param secWebSocketKey
 	 * @throws IOException
 	 */
-	private void verifyServerHandshake() throws IOException {
-		byte[] buffer = new byte[8192];
-		int quantity = bis.read(buffer);
-
-		if (quantity == -1) {
-			throw new IOException();
-		} else {
-			byte[] handshake = new byte[quantity];
-			for (int i = 0; i < quantity; i++) {
-				handshake[i] = buffer[i];
+	private void verifyServerHandshake(InputStream inputStream, String secWebSocketKey) throws IOException {
+		try {
+			SessionInputBufferImpl sessionInputBuffer = new SessionInputBufferImpl(new HttpTransportMetricsImpl(), 8192);
+			sessionInputBuffer.bind(inputStream);
+			HttpMessageParser<HttpResponse> parser = new DefaultHttpResponseParser(sessionInputBuffer);
+			HttpResponse response = parser.parse();
+			
+			StatusLine statusLine = response.getStatusLine();
+			if (statusLine == null) {
+				throw new InvalidServerHandshakeException("There is no status line");
 			}
-
-			// To be implemented
+			
+			int statusCode = statusLine.getStatusCode();
+			if (statusCode != 101) {
+				throw new InvalidServerHandshakeException("Invalid status code. Expected 101, received: " + statusCode);
+			}
+			
+			Header[] upgradeHeader = response.getHeaders("Upgrade");
+			if (upgradeHeader.length == 0) {
+				throw new InvalidServerHandshakeException("There is no header named Upgrade");
+			}
+			String upgradeValue = upgradeHeader[0].getValue();
+			if (upgradeValue == null) {
+				throw new InvalidServerHandshakeException("There is no value for header Upgrade");
+			}
+			upgradeValue = upgradeValue.toLowerCase();
+			if (!upgradeValue.equals("websocket")) {
+				throw new InvalidServerHandshakeException("Invalid value for header Upgrade. Expected: websocket, received: " + upgradeValue);
+			}
+			
+			Header[] connectionHeader = response.getHeaders("Connection");
+			if (connectionHeader.length == 0) {
+				throw new InvalidServerHandshakeException("There is no header named Connection");
+			}
+			String connectionValue = connectionHeader[0].getValue();
+			if (connectionValue == null) {
+				throw new InvalidServerHandshakeException("There is no value for header Connection");
+			}
+			connectionValue = connectionValue.toLowerCase();
+			if (!connectionValue.equals("upgrade")) {
+				throw new InvalidServerHandshakeException("Invalid value for header Connection. Expected: upgrade, received: " + connectionValue);
+			}
+			
+			Header[] secWebSocketAcceptHeader = response.getHeaders("Sec-WebSocket-Accept");
+			if (secWebSocketAcceptHeader.length == 0) {
+				throw new InvalidServerHandshakeException("There is no header named Sec-WebSocket-Accept");
+			}
+			String secWebSocketAcceptValue = secWebSocketAcceptHeader[0].getValue();
+			if (secWebSocketAcceptValue == null) {
+				throw new InvalidServerHandshakeException("There is no value for header Sec-WebSocket-Accept");
+			}
+			
+			String keyConcatenation = secWebSocketKey + GUID;
+			byte[] sha1 = DigestUtils.sha1(keyConcatenation);
+			String secWebSocketAccept = Base64.encodeBase64String(sha1);
+			if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
+				throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
+			}
+		} catch (HttpException e) {
+			throw new InvalidServerHandshakeException(e.getMessage());
 		}
 	}
 
@@ -538,7 +602,7 @@ public abstract class WebSocketClient implements Runnable {
 			// Reads the second byte
 			int secondByte = bis.read();
 			if (secondByte == -1) {
-				throw new IOException();
+				throw new IOException("Unexpected end of stream");
 			}
 
 			// Data contained in the second byte
@@ -554,7 +618,7 @@ public abstract class WebSocketClient implements Runnable {
 				for (int i = 0; i < 2; i++) {
                     byte b = (byte) bis.read();
                     if (b == -1) {
-                        throw new IOException();
+                        throw new IOException("Unexpected end of stream");
                     }
                     nextTwoBytes[i] = b;
                 }
@@ -569,7 +633,7 @@ public abstract class WebSocketClient implements Runnable {
 				for (int i = 0; i < 8; i++) {
                     byte b = (byte) bis.read();
                     if (b == -1) {
-                        throw new IOException();
+                        throw new IOException("Unexpected end of stream");
                     }
                     nextEightBytes[i] = b;
                 }
@@ -589,7 +653,7 @@ public abstract class WebSocketClient implements Runnable {
 			for (int i = 0; i < payloadLength; i++) {
                 byte b = (byte) bis.read();
                 if (b == -1) {
-                    throw new IOException();
+                    throw new IOException("Unexpected end of stream");
                 }
                 data[i] = b;
             }
@@ -627,7 +691,7 @@ public abstract class WebSocketClient implements Runnable {
 		// and if the connection didn't receive a close frame,
 		// an IOException must be thrown because the connection didn't close
 		// gracefully
-		throw new IOException();
+		throw new IOException("Unexpected end of stream");
 	}
 
 	private void closeInternal() {

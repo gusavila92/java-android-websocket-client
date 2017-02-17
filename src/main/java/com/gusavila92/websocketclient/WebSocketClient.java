@@ -280,8 +280,12 @@ public abstract class WebSocketClient {
                 startConnection();
             }
 		} catch (Exception e) {
+			synchronized (lock) {
+				if (!isClosed) {
+					onException(e);
+				}
+			}
 			closeInternal();
-			onException(e);
 		}
 	}
 
@@ -698,12 +702,12 @@ public abstract class WebSocketClient {
 		try {
 			synchronized (lock) {
                 if (!isClosed) {
+                	isClosed = true;
                     if (socket != null) {
                         socket.close();
                         pendingMessages = true;
                         lock.notify();
                     }
-                    isClosed = true;
                 }
             }
 		} catch (IOException e) {

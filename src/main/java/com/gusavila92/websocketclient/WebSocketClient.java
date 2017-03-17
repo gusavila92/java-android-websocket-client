@@ -32,10 +32,16 @@ import java.util.Random;
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
 
+/**
+ * Implements the WebSocket protocol
+ * 
+ * @author Gustavo Avila
+ *
+ */
 public abstract class WebSocketClient {
 	// GUID for Sec-WebSocket-Accept
 	private static final String GUID = "258EAFA5-E914-47DA-95CA-C5AB0DC85B11";
-	
+
 	// All supported opcodes
 	private static final int OPCODE_CONTINUATION = 0x0;
 	private static final int OPCODE_TEXT = 0x1;
@@ -64,12 +70,12 @@ public abstract class WebSocketClient {
 	 * writer thread It is used to avoid a missed signal between threads
 	 */
 	private volatile boolean pendingMessages;
-	
+
 	/**
-     * Flag indicating if the close method was called before establishing a connection
-     * If this is true, a connection will never be established
-     */
-    private volatile boolean isClosed;
+	 * Flag indicating if the close method was called before establishing a
+	 * connection If this is true, a connection will never be established
+	 */
+	private volatile boolean isClosed;
 
 	/**
 	 * The data waiting to be read from the writer thread
@@ -276,9 +282,9 @@ public abstract class WebSocketClient {
 	private void connect() {
 		try {
 			boolean success = createAndConnectTCPSocket();
-            if (success) {
-                startConnection();
-            }
+			if (success) {
+				startConnection();
+			}
 		} catch (Exception e) {
 			synchronized (lock) {
 				if (!isClosed) {
@@ -290,48 +296,48 @@ public abstract class WebSocketClient {
 	}
 
 	/**
-     * Creates and connects a TCP socket for the underlying connection
-     *
-     * @return true is the socket was succesfully connected, false otherwise
-     * @throws IOException
-     */
-    private boolean createAndConnectTCPSocket() throws IOException {
-        synchronized (lock) {
-            if (!isClosed) {
-                String scheme = uri.getScheme();
-                int port = uri.getPort();
-                if (scheme != null) {
-                    if (scheme.equals("ws")) {
-                        SocketFactory socketFactory = SocketFactory.getDefault();
-                        socket = socketFactory.createSocket();
+	 * Creates and connects a TCP socket for the underlying connection
+	 *
+	 * @return true is the socket was succesfully connected, false otherwise
+	 * @throws IOException
+	 */
+	private boolean createAndConnectTCPSocket() throws IOException {
+		synchronized (lock) {
+			if (!isClosed) {
+				String scheme = uri.getScheme();
+				int port = uri.getPort();
+				if (scheme != null) {
+					if (scheme.equals("ws")) {
+						SocketFactory socketFactory = SocketFactory.getDefault();
+						socket = socketFactory.createSocket();
 
-                        if (port != -1) {
-                            socket.connect(new InetSocketAddress(uri.getHost(), port));
-                        } else {
-                            socket.connect(new InetSocketAddress(uri.getHost(), 80));
-                        }
-                    } else if (scheme.equals("wss")) {
-                        SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
-                        socket = socketFactory.createSocket();
+						if (port != -1) {
+							socket.connect(new InetSocketAddress(uri.getHost(), port));
+						} else {
+							socket.connect(new InetSocketAddress(uri.getHost(), 80));
+						}
+					} else if (scheme.equals("wss")) {
+						SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+						socket = socketFactory.createSocket();
 
-                        if (port != -1) {
-                            socket.connect(new InetSocketAddress(uri.getHost(), port));
-                        } else {
-                            socket.connect(new InetSocketAddress(uri.getHost(), 443));
-                        }
-                    } else {
-                        throw new IllegalSchemeException("The scheme component of the URI should be ws or wss");
-                    }
-                } else {
-                    throw new IllegalSchemeException("The scheme component of the URI cannot be null");
-                }
+						if (port != -1) {
+							socket.connect(new InetSocketAddress(uri.getHost(), port));
+						} else {
+							socket.connect(new InetSocketAddress(uri.getHost(), 443));
+						}
+					} else {
+						throw new IllegalSchemeException("The scheme component of the URI should be ws or wss");
+					}
+				} else {
+					throw new IllegalSchemeException("The scheme component of the URI cannot be null");
+				}
 
-                return true;
-            }
+				return true;
+			}
 
-            return false;
-        }
-    }
+			return false;
+		}
+	}
 
 	/**
 	 * Starts the WebSocket connection
@@ -345,11 +351,11 @@ public abstract class WebSocketClient {
 		Random random = new Random();
 		random.nextBytes(key);
 		String base64Key = Base64.encodeBase64String(key);
-		
+
 		byte[] handshake = createHandshake(base64Key);
 		bos.write(handshake);
 		bos.flush();
-		
+
 		InputStream inputStream = socket.getInputStream();
 		verifyServerHandshake(inputStream, base64Key);
 
@@ -427,21 +433,22 @@ public abstract class WebSocketClient {
 	 */
 	private void verifyServerHandshake(InputStream inputStream, String secWebSocketKey) throws IOException {
 		try {
-			SessionInputBufferImpl sessionInputBuffer = new SessionInputBufferImpl(new HttpTransportMetricsImpl(), 8192);
+			SessionInputBufferImpl sessionInputBuffer = new SessionInputBufferImpl(new HttpTransportMetricsImpl(),
+					8192);
 			sessionInputBuffer.bind(inputStream);
 			HttpMessageParser<HttpResponse> parser = new DefaultHttpResponseParser(sessionInputBuffer);
 			HttpResponse response = parser.parse();
-			
+
 			StatusLine statusLine = response.getStatusLine();
 			if (statusLine == null) {
 				throw new InvalidServerHandshakeException("There is no status line");
 			}
-			
+
 			int statusCode = statusLine.getStatusCode();
 			if (statusCode != 101) {
 				throw new InvalidServerHandshakeException("Invalid status code. Expected 101, received: " + statusCode);
 			}
-			
+
 			Header[] upgradeHeader = response.getHeaders("Upgrade");
 			if (upgradeHeader.length == 0) {
 				throw new InvalidServerHandshakeException("There is no header named Upgrade");
@@ -452,9 +459,10 @@ public abstract class WebSocketClient {
 			}
 			upgradeValue = upgradeValue.toLowerCase();
 			if (!upgradeValue.equals("websocket")) {
-				throw new InvalidServerHandshakeException("Invalid value for header Upgrade. Expected: websocket, received: " + upgradeValue);
+				throw new InvalidServerHandshakeException(
+						"Invalid value for header Upgrade. Expected: websocket, received: " + upgradeValue);
 			}
-			
+
 			Header[] connectionHeader = response.getHeaders("Connection");
 			if (connectionHeader.length == 0) {
 				throw new InvalidServerHandshakeException("There is no header named Connection");
@@ -465,9 +473,10 @@ public abstract class WebSocketClient {
 			}
 			connectionValue = connectionValue.toLowerCase();
 			if (!connectionValue.equals("upgrade")) {
-				throw new InvalidServerHandshakeException("Invalid value for header Connection. Expected: upgrade, received: " + connectionValue);
+				throw new InvalidServerHandshakeException(
+						"Invalid value for header Connection. Expected: upgrade, received: " + connectionValue);
 			}
-			
+
 			Header[] secWebSocketAcceptHeader = response.getHeaders("Sec-WebSocket-Accept");
 			if (secWebSocketAcceptHeader.length == 0) {
 				throw new InvalidServerHandshakeException("There is no header named Sec-WebSocket-Accept");
@@ -476,12 +485,13 @@ public abstract class WebSocketClient {
 			if (secWebSocketAcceptValue == null) {
 				throw new InvalidServerHandshakeException("There is no value for header Sec-WebSocket-Accept");
 			}
-			
+
 			String keyConcatenation = secWebSocketKey + GUID;
 			byte[] sha1 = DigestUtils.sha1(keyConcatenation);
 			String secWebSocketAccept = Base64.encodeBase64String(sha1);
 			if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
-				throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
+				throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: "
+						+ secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
 			}
 		} catch (HttpException e) {
 			throw new InvalidServerHandshakeException(e.getMessage());
@@ -620,12 +630,12 @@ public abstract class WebSocketClient {
 				// Attempts to read the next 2 bytes
 				byte[] nextTwoBytes = new byte[2];
 				for (int i = 0; i < 2; i++) {
-                    byte b = (byte) bis.read();
-                    if (b == -1) {
-                        throw new IOException("Unexpected end of stream");
-                    }
-                    nextTwoBytes[i] = b;
-                }
+					byte b = (byte) bis.read();
+					if (b == -1) {
+						throw new IOException("Unexpected end of stream");
+					}
+					nextTwoBytes[i] = b;
+				}
 
 				// Those last 2 bytes will be interpreted as a 16-bit unsigned
 				// integer
@@ -635,12 +645,12 @@ public abstract class WebSocketClient {
 				// Attempts to read the next 8 bytes
 				byte[] nextEightBytes = new byte[8];
 				for (int i = 0; i < 8; i++) {
-                    byte b = (byte) bis.read();
-                    if (b == -1) {
-                        throw new IOException("Unexpected end of stream");
-                    }
-                    nextEightBytes[i] = b;
-                }
+					byte b = (byte) bis.read();
+					if (b == -1) {
+						throw new IOException("Unexpected end of stream");
+					}
+					nextEightBytes[i] = b;
+				}
 
 				// Only the last 4 bytes matter because Java doesn't support
 				// arrays with more than 2^31 -1 elements, so a 64-bit unsigned
@@ -655,12 +665,12 @@ public abstract class WebSocketClient {
 			// Attempts to read the payload data
 			byte[] data = new byte[payloadLength];
 			for (int i = 0; i < payloadLength; i++) {
-                byte b = (byte) bis.read();
-                if (b == -1) {
-                    throw new IOException("Unexpected end of stream");
-                }
-                data[i] = b;
-            }
+				byte b = (byte) bis.read();
+				if (b == -1) {
+					throw new IOException("Unexpected end of stream");
+				}
+				data[i] = b;
+			}
 
 			// Execute the action depending on the opcode
 			switch (opcode) {
@@ -701,15 +711,15 @@ public abstract class WebSocketClient {
 	private void closeInternal() {
 		try {
 			synchronized (lock) {
-                if (!isClosed) {
-                	isClosed = true;
-                    if (socket != null) {
-                        socket.close();
-                        pendingMessages = true;
-                        lock.notify();
-                    }
-                }
-            }
+				if (!isClosed) {
+					isClosed = true;
+					if (socket != null) {
+						socket.close();
+						pendingMessages = true;
+						lock.notify();
+					}
+				}
+			}
 		} catch (IOException e) {
 			// This should never happen
 		}

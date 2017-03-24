@@ -1,66 +1,83 @@
-# java-websocketclient
-A WebSocket Client library for Java / Android
+# Java/Android WebSocket Client
+A very lightweight WebSocket client library for Java/Android which aims to implement the WebSocket protocol as defined in RFC 6455.
 
-This is a very lightweight WebSocket Client library which aims to implement the WebSocket protocol as defined in RFC 6455.
+## Download
+This library is published into JCenter and Maven Central.
+
+### Gradle
+```
+compile 'tech.gusavila92:java-android-websocket-client:1.0.0'
+```
+### Maven
+```
+<dependency>
+  <groupId>tech.gusavila92</groupId>
+  <artifactId>java-android-websocket-client</artifactId>
+  <version>1.0.0</version>
+  <type>pom</type>
+</dependency>
+```
 
 This is an example of how you can start a new connection.
 ```
-        private WebSocketClient client;
-	
-	private void createWebSocketClient() {
-		URI uri = null;
-		
-		try {
-			uri = new URI("ws://localhost:8080/test");
-		} catch(URISyntaxException e) {
-			e.printStackTrace();
-		}
-		
-		Map<String, String> handshakeHeaders = new HashMap<String, String>();
-		handshakeHeaders.put("Origin", "http://www.example.com");
-		
-		client = new WebSocketClient(uri, handshakeHeaders) {
+private WebSocketClient client;
 
-			@Override
-			public void onOpen() {
-				System.out.println("open");
-			}
+private void createWebSocketClient() {
+	URI uri = null;
 
-			@Override
-			public void onTextReceived(String message) {
-				System.out.println(message);
-			}
-
-			@Override
-			public void onBinaryReceived(byte[] data) {
-				System.out.println("binary");
-			}
-
-			@Override
-			public void onPingReceived(byte[] data) {
-				System.out.println("ping");
-			}
-
-			@Override
-			public void onPongReceived() {
-				System.out.println("pong");
-			}
-
-			@Override
-			public void onException(Exception e) {
-				System.out.println(e.getMessage());
-			}
-
-			@Override
-			public void onCloseReceived() {
-				System.out.println("close");
-			}
-		};
-		
-		client.connect();
-		
-		client.send("sample message");
+	try {
+		uri = new URI("ws://localhost:8080/test");
+	} catch (URISyntaxException e) {
+		e.printStackTrace();
 	}
+
+	Map<String, String> handshakeHeaders = new HashMap<String, String>();
+	handshakeHeaders.put("Origin", "http://www.example.com");
+
+	client = new WebSocketClient(uri, handshakeHeaders) {
+
+		@Override
+		public void onOpen() {
+			System.out.println("open");
+		}
+
+		@Override
+		public void onTextReceived(String message) {
+			System.out.println(message);
+		}
+
+		@Override
+		public void onBinaryReceived(byte[] data) {
+			System.out.println("binary");
+		}
+
+		@Override
+		public void onPingReceived(byte[] data) {
+			System.out.println("ping");
+		}
+
+		@Override
+		public void onPongReceived() {
+			System.out.println("pong");
+		}
+
+		@Override
+		public void onException(Exception e) {
+			System.out.println(e.getMessage());
+		}
+
+		@Override
+		public void onCloseReceived() {
+			System.out.println("close");
+		}
+	};
+
+	client.connectAsync();
+
+	client.send("sample message");
+		
+	client.close();
+}
 ```
 If you don't specify a port into the URI, the default port will be 80 for *ws* and 443 for *wss*.
 

@@ -6,77 +6,75 @@ This library is published into JCenter and Maven Central.
 
 ### Gradle
 ```
-compile 'tech.gusavila92:java-android-websocket-client:1.0.0'
+compile 'tech.gusavila92:java-android-websocket-client:1.1.0'
 ```
 ### Maven
 ```
 <dependency>
   <groupId>tech.gusavila92</groupId>
   <artifactId>java-android-websocket-client</artifactId>
-  <version>1.0.0</version>
+  <version>1.1.0</version>
   <type>pom</type>
 </dependency>
 ```
 
 This is an example of how you can start a new connection.
 ```
-private WebSocketClient client;
+private WebSocketClient webSocketClient;
 
 private void createWebSocketClient() {
-	URI uri = null;
+	URI uri;
+        try {
+            uri = new URI(ws://localhost:8080/test);
+        }
+        catch (URISyntaxException e) {
+            e.printStackTrace();
+            return;
+        }
 
-	try {
-		uri = new URI("ws://localhost:8080/test");
-	} catch (URISyntaxException e) {
-		e.printStackTrace();
-	}
+        webSocketClient = new WebSocketClient(uri) {
+            @Override
+            public void onOpen() {
+                System.out.println("onOpen");
+                webSocketClient.send("Hello, World!");
+            }
 
-	Map<String, String> handshakeHeaders = new HashMap<String, String>();
-	handshakeHeaders.put("Origin", "http://www.example.com");
+            @Override
+            public void onTextReceived(String message) {
+                System.out.println("onTextReceived");
+            }
 
-	client = new WebSocketClient(uri, handshakeHeaders) {
+            @Override
+            public void onBinaryReceived(byte[] data) {
+                System.out.println("onBinaryReceived");
+            }
 
-		@Override
-		public void onOpen() {
-			System.out.println("open");
-		}
+            @Override
+            public void onPingReceived(byte[] data) {
+                System.out.println("onPingReceived");
+            }
 
-		@Override
-		public void onTextReceived(String message) {
-			System.out.println(message);
-		}
+            @Override
+            public void onPongReceived(byte[] data) {
+                System.out.println("onPongReceived");
+            }
 
-		@Override
-		public void onBinaryReceived(byte[] data) {
-			System.out.println("binary");
-		}
+            @Override
+            public void onException(Exception e) {
+                System.out.println(e.getMessage());
+            }
 
-		@Override
-		public void onPingReceived(byte[] data) {
-			System.out.println("ping");
-		}
+            @Override
+            public void onCloseReceived() {
+                System.out.println("onCloseReceived");
+            }
+        };
 
-		@Override
-		public void onPongReceived() {
-			System.out.println("pong");
-		}
-
-		@Override
-		public void onException(Exception e) {
-			System.out.println(e.getMessage());
-		}
-
-		@Override
-		public void onCloseReceived() {
-			System.out.println("close");
-		}
-	};
-
-	client.connectAsync();
-
-	client.send("sample message");
-		
-	client.close();
+        webSocketClient.setConnectTimeout(10000);
+        webSocketClient.setReadTimeout(60000);
+        webSocketClient.addHeader("Origin", "http://developer.example.com");
+        webSocketClient.enableAutomaticReconnection(5000);
+        webSocketClient.connect();
 }
 ```
 If you don't specify a port into the URI, the default port will be 80 for *ws* and 443 for *wss*.
@@ -88,11 +86,19 @@ This is the list of the default HTTP Headers that will be included into the WebS
 - Sec-WebSocket-Key
 - Sec-WebSocket-Version
 
-If you wish to include more headers, like *Origin*, you can pass a *Map* to the constructor; otherwise, just pass *null*.
+If you wish to include more headers, like *Origin*, you can add them using ```addHeader(String key, String value)``` method.
 
-When an Exception occurs, the library calls onException and automatically closes the socket.
+When an Exception occurs, the library calls ```onException(Exception e)```.
 
-When you are finished using the WebSocket, you can call ```client.close()``` to close the connection.
+When you are finished using the WebSocket, you can call ```webSocketClient.close()``` to close the connection.
+
+## Automatic reconnection
+Automatic reconnection is supported through ```enableAutomaticReconnection(long waitTimeBeforeReconnection)``` method. Every time an *IOException* occurs, ```onException(Exception e)``` method is called and automatically a new connection is created and started. For performance reasons, between every reconnection intent you should specify a wait time before trying to reconnect again, using ```waitTimeBeforeReconnection``` parameter.
+
+## Timeouts
+Connect and read timeouts are supported through ```setConnectTimeout(int connectTimeout)``` and ```setReadTimeout(int readTimeout)```. If one of those timeouts expires, ```onException(Exception e)``` is called. If automatic reconnection is enabled, a new connection could be established automatically.
+
+Connect timeout is used in establishing a TCP connection between this client and the server. Read timeout is used when this WebSocket Client doesn't received data for a long time. A server could send data periodically to ensure that the underlying TCP connection is not closed unexpectedly due to an idle connection, and this read timeout is designed for this purpose.
 
 ## ws and wss
 This library supports secure and insecure WebSockets. You just need to define the scheme as *wss* or *ws* (case-sensitive) into the URI.

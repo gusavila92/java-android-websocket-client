@@ -25,6 +25,7 @@ import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.Charset;
 import java.security.SecureRandom;
+import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
@@ -149,6 +150,7 @@ public abstract class WebSocketClient {
 		this.automaticReconnection = false;
 		this.waitTimeBeforeReconnection = 0;
 		this.isRunning = false;
+		this.headers = new HashMap<String, String>();
 		webSocketConnection = new WebSocketConnection();
 	}
 
@@ -725,11 +727,9 @@ public abstract class WebSocketClient {
 			builder.append("Sec-WebSocket-Version: 13");
 			builder.append("\r\n");
 
-			if (headers != null) {
-				for (Map.Entry<String, String> entry : headers.entrySet()) {
-					builder.append(entry.getKey() + ": " + entry.getValue());
-					builder.append("\r\n");
-				}
+			for (Map.Entry<String, String> entry : headers.entrySet()) {
+				builder.append(entry.getKey() + ": " + entry.getValue());
+				builder.append("\r\n");
 			}
 
 			builder.append("\r\n");

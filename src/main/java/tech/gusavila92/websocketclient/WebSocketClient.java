@@ -27,6 +27,7 @@ import java.nio.charset.Charset;
 import java.security.SecureRandom;
 import java.util.LinkedList;
 import java.util.Map;
+import java.util.HashMap;
 import java.util.Random;
 
 import javax.net.SocketFactory;
@@ -120,7 +121,7 @@ public abstract class WebSocketClient {
 	/**
 	 * Custom headers to be included into the handshake
 	 */
-	private Map<String, String> headers;
+	private Map<String, String> headers = new HashMap<String, String>();
 
 	/**
 	 * Underlying WebSocket connection This instance could change due to an

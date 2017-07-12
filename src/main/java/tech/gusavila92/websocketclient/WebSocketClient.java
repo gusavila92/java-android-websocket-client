@@ -923,12 +923,13 @@ public abstract class WebSocketClient {
 		 * @throws IOException
 		 */
 		private void read() throws IOException {
-			// The first byte of every data frame
-			int firstByte;
+			// Loop forever until an Exception occurred due to a connection
+			// error,
+			// or because the connection was closed.
+			while (true) {
+				// The first byte of every data frame
+				int firstByte = bis.read();
 
-			// Loop until there are not more data to be read from the
-			// InputStream
-			while ((firstByte = bis.read()) != -1) {
 				// Data contained in the first byte
 				// int fin = (firstByte << 24) >>> 31;
 				// int rsv1 = (firstByte << 25) >>> 31;
@@ -938,9 +939,6 @@ public abstract class WebSocketClient {
 
 				// Reads the second byte
 				int secondByte = bis.read();
-				if (secondByte == -1) {
-					throw new IOException("Unexpected end of stream");
-				}
 
 				// Data contained in the second byte
 				// int mask = (secondByte << 24) >>> 31;
@@ -955,9 +953,6 @@ public abstract class WebSocketClient {
 					byte[] nextTwoBytes = new byte[2];
 					for (int i = 0; i < 2; i++) {
 						byte b = (byte) bis.read();
-						if (b == -1) {
-							throw new IOException("Unexpected end of stream");
-						}
 						nextTwoBytes[i] = b;
 					}
 
@@ -971,9 +966,6 @@ public abstract class WebSocketClient {
 					byte[] nextEightBytes = new byte[8];
 					for (int i = 0; i < 8; i++) {
 						byte b = (byte) bis.read();
-						if (b == -1) {
-							throw new IOException("Unexpected end of stream");
-						}
 						nextEightBytes[i] = b;
 					}
 
@@ -993,9 +985,6 @@ public abstract class WebSocketClient {
 				byte[] data = new byte[payloadLength];
 				for (int i = 0; i < payloadLength; i++) {
 					byte b = (byte) bis.read();
-					if (b == -1) {
-						throw new IOException("Unexpected end of stream");
-					}
 					data[i] = b;
 				}
 
@@ -1027,12 +1016,6 @@ public abstract class WebSocketClient {
 					return;
 				}
 			}
-
-			// If there are not more data to be read,
-			// and if the connection didn't receive a close frame,
-			// an IOException must be thrown because the connection didn't close
-			// gracefully
-			throw new IOException("Unexpected end of stream");
 		}
 
 		/**

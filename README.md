@@ -6,14 +6,14 @@ This library is published into JCenter and Maven Central.
 
 ### Gradle
 ```
-compile 'tech.gusavila92:java-android-websocket-client:1.1.2'
+compile 'tech.gusavila92:java-android-websocket-client:1.1.3'
 ```
 ### Maven
 ```
 <dependency>
   <groupId>tech.gusavila92</groupId>
   <artifactId>java-android-websocket-client</artifactId>
-  <version>1.1.2</version>
+  <version>1.1.3</version>
   <type>pom</type>
 </dependency>
 ```

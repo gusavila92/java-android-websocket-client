@@ -923,13 +923,11 @@ public abstract class WebSocketClient {
 		 * @throws IOException
 		 */
 		private void read() throws IOException {
-			// Loop forever until an Exception occurred due to a connection
-			// error,
-			// or because the connection was closed.
-			while (true) {
-				// The first byte of every data frame
-				int firstByte = bis.read();
-
+			// The first byte of every data frame
+			int firstByte;
+			
+			// Loop until end of stream is reached.
+			while ((firstByte = bis.read()) != -1) {
 				// Data contained in the first byte
 				// int fin = (firstByte << 24) >>> 31;
 				// int rsv1 = (firstByte << 25) >>> 31;
@@ -1016,6 +1014,12 @@ public abstract class WebSocketClient {
 					return;
 				}
 			}
+			
+			// If there are not more data to be read,
+			// and if the connection didn't receive a close frame,
+			// an IOException must be thrown because the connection didn't close
+			// gracefully
+			throw new IOException("Unexpected end of stream");
 		}
 
 		/**

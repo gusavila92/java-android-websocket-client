@@ -6,14 +6,14 @@ This library is published into JCenter and Maven Central.
 
 ### Gradle
 ```
-compile 'tech.gusavila92:java-android-websocket-client:1.1.4'
+compile 'tech.gusavila92:java-android-websocket-client:1.2.0'
 ```
 ### Maven
 ```
 <dependency>
   <groupId>tech.gusavila92</groupId>
   <artifactId>java-android-websocket-client</artifactId>
-  <version>1.1.4</version>
+  <version>1.2.0</version>
   <type>pom</type>
 </dependency>
 ```
@@ -25,7 +25,7 @@ private WebSocketClient webSocketClient;
 private void createWebSocketClient() {
 	URI uri;
         try {
-            uri = new URI(ws://localhost:8080/test);
+            uri = new URI("ws://localhost:8080/test");
         }
         catch (URISyntaxException e) {
             e.printStackTrace();
@@ -102,6 +102,9 @@ Connect timeout is used in establishing a TCP connection between this client and
 
 ## ws and wss
 This library supports secure and insecure WebSockets. You just need to define the scheme as *wss* or *ws* (case-sensitive) into the URI.
+
+## Ping and Pong frames
+When a Ping frame is received, automatically a Pong frame is sent with the same Application Data of the Ping frame. You can also send Ping and Pong frames unsolicited using ```sendPing(byte[] data)``` and ```sendPong(byte[] data)```. Data can be *null* if don't want to send Application Data.
 
 ## Build
 You need Gradle to build the project. Any version will do.

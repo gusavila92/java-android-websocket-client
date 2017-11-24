@@ -120,6 +120,13 @@ gradle eclipse
 ```
 
 and Gradle will automatically generate the source files required to open the project in Eclipse.
+### IntelliJ IDEA
+If you want to open the project in IntelliJ IDEA, just type
+```
+gradle idea
+```
+
+and Gradle will automatically generate the source files required to open the project in IntelliJ IDEA.
 ## Minimum requirements
 This libary requires at minimum Java 1.6 or Android 1.6 (API 4)
 

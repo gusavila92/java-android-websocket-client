@@ -16,7 +16,7 @@ bintray {
         repo = 'maven'
         name = 'java-android-websocket-client'
         version {
-	        name = '1.2.0'
+	        name = '1.2.1'
 	        gpg {
                 sign = true
                 passphrase = System.getenv('BINTRAY_GPG_PASSPHRASE')
@@ -64,7 +64,7 @@ publishing {
             artifact javadocJar
             groupId 'tech.gusavila92'
             artifactId 'java-android-websocket-client'
-            version '1.2.0'
+            version '1.2.1'
             pom.withXml {
                 def root = asNode()
                 root.appendNode('name', 'Java/Android WebSocket Client')

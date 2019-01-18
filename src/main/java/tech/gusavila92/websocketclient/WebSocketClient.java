@@ -134,6 +134,9 @@ public abstract class WebSocketClient {
      */
     private volatile Thread reconnectionThread;
 
+
+    private SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+
     /**
      * Initialize all the variables
      *
@@ -150,6 +153,11 @@ public abstract class WebSocketClient {
         this.isRunning = false;
         this.headers = new HashMap<String, String>();
         webSocketConnection = new WebSocketConnection();
+    }
+
+
+    public void setSSLSocketFactory(SSLSocketFactory sslSocketFactory) {
+        socketFactory = sslSocketFactory;
     }
 
     /**
@@ -648,7 +656,6 @@ public abstract class WebSocketClient {
                                 socket.connect(new InetSocketAddress(uri.getHost(), 80), connectTimeout);
                             }
                         } else if (scheme.equals("wss")) {
-                            SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
                             socket = socketFactory.createSocket();
                             socket.setSoTimeout(readTimeout);
 

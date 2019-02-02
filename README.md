@@ -88,6 +88,8 @@ This is the list of the default HTTP Headers that will be included into the WebS
 
 If you wish to include more headers, like *Origin*, you can add them using ```addHeader(String key, String value)``` method.
 
+You can also override the default SSLSocketFactory using ```setSSLSocketFactory(SSLSocketFactory factory)```.
+
 When an Exception occurs, the library calls ```onException(Exception e)```.
 
 When you are finished using the WebSocket, you can call ```webSocketClient.close()``` to close the connection.

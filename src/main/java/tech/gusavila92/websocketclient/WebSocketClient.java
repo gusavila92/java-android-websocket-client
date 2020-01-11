@@ -944,7 +944,7 @@ public abstract class WebSocketClient {
          */
         private void read() throws IOException {
             // If message contains fragmented parts we should put it all together.
-            LinkedList<byte[]> messageParts = new LinkedList<byte[]>();
+            LinkedList<byte[]> messageParts = new LinkedList<>();
 
             // The first byte of every data frame
             int firstByte;
@@ -980,7 +980,10 @@ public abstract class WebSocketClient {
                 if (payloadLength == 126) {
                     // Attempts to read the next 2 bytes
                     byte[] nextTwoBytes = new byte[2];
-                    if (bis.read(nextTwoBytes) == -1) break;
+                    for (int i = 0; i < 2; i++) {
+                        byte b = (byte) bis.read();
+                        nextTwoBytes[i] = b;
+                    }
 
                     // Those last 2 bytes will be interpreted as a 16-bit
                     // unsigned
@@ -990,7 +993,10 @@ public abstract class WebSocketClient {
                 } else if (payloadLength == 127) {
                     // Attempts to read the next 8 bytes
                     byte[] nextEightBytes = new byte[8];
-                    if (bis.read(nextEightBytes) == -1) break;
+                    for (int i = 0; i < 8; i++) {
+                        byte b = (byte) bis.read();
+                        nextEightBytes[i] = b;
+                    }
 
                     // Only the last 4 bytes matter because Java doesn't support
                     // arrays with more than 2^31 -1 elements, so a 64-bit
@@ -1006,7 +1012,10 @@ public abstract class WebSocketClient {
 
                 // Attempts to read the payload data
                 byte[] data = new byte[payloadLength];
-                if (bis.read(data) == -1) break;
+                for (int i = 0; i < payloadLength; i++) {
+                    byte b = (byte) bis.read();
+                    data[i] = b;
+                }
 
                 if (isLast) {
                     // If we already have some fragments, just add last and put it together

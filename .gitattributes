@@ -1,0 +1,7 @@
+* text=auto eol=lf
+*.java text
+build.gradle text
+LICENSE text
+*.md text
+
+*.bat text eol=crlf

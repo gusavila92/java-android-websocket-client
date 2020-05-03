@@ -1,5 +1,9 @@
 package tech.gusavila92.websocketclient;
 
+
+
+
+
 import tech.gusavila92.apache.commons.codec.binary.Base64;
 import tech.gusavila92.apache.commons.codec.digest.DigestUtils;
 import tech.gusavila92.apache.http.Header;

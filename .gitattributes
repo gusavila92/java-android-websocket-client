@@ -1,4 +1,4 @@
-* text=auto eol=lf
+* text=auto
 *.java text
 build.gradle text
 gradlew text

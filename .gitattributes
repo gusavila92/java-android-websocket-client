@@ -1,7 +1,11 @@
 * text=auto eol=lf
 *.java text
 build.gradle text
+gradlew text
+*.properties text
 LICENSE text
 *.md text
 
 *.bat text eol=crlf
+
+*.jar binary

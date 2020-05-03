@@ -1,18 +1,6 @@
+# Binaries
 bin/
 build/
 
-# Eclipse
-.classpath
-.settings
-.project
-
 # Gradle
 .gradle
-
-# IntelliJ IDEA
-*.iml
-*.ipr
-*.iws
-/out
-
-.DS_Store

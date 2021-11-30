@@ -334,6 +334,8 @@ public abstract class WebSocketClient {
 
                             if (e instanceof IOException && automaticReconnection) {
                                 createAndStartReconnectionThread();
+                            }else if (e instanceof InvalidServerHandshakeException && automaticReconnection) {
+                                createAndStartReconnectionThread();
                             }
                         }
                     }

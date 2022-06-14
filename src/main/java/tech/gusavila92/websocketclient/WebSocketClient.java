@@ -719,10 +719,14 @@ public abstract class WebSocketClient {
             String query = uri.getRawQuery();
 
             String requestUri;
-            if (query == null) {
+            if (path != null && !path.isEmpty()) {
                 requestUri = path;
             } else {
-                requestUri = path + "?" + query;
+                requestUri = "/";
+            }
+
+            if (query != null && !query.isEmpty()) {
+                requestUri = requestUri + "?" + query;
             }
 
             builder.append("GET " + requestUri + " HTTP/1.1");

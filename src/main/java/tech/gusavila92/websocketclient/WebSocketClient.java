@@ -2,14 +2,6 @@ package tech.gusavila92.websocketclient;
 
 import tech.gusavila92.apache.commons.codec.binary.Base64;
 import tech.gusavila92.apache.commons.codec.digest.DigestUtils;
-import tech.gusavila92.apache.http.Header;
-import tech.gusavila92.apache.http.HttpException;
-import tech.gusavila92.apache.http.HttpResponse;
-import tech.gusavila92.apache.http.StatusLine;
-import tech.gusavila92.apache.http.impl.io.DefaultHttpResponseParser;
-import tech.gusavila92.apache.http.impl.io.HttpTransportMetricsImpl;
-import tech.gusavila92.apache.http.impl.io.SessionInputBufferImpl;
-import tech.gusavila92.apache.http.io.HttpMessageParser;
 import tech.gusavila92.websocketclient.common.Utils;
 import tech.gusavila92.websocketclient.exceptions.UnknownOpcodeException;
 import tech.gusavila92.websocketclient.exceptions.IllegalSchemeException;
@@ -697,12 +689,10 @@ public abstract class WebSocketClient {
 
             InputStream inputStream = socket.getInputStream();
             verifyServerHandshake(inputStream, base64Key);
-
+            notifyOnOpen();
             writerThread.start();
 
-            notifyOnOpen();
-
-            bis = new BufferedInputStream(socket.getInputStream(), 65536);
+            bis = new BufferedInputStream(inputStream, 65536);
             read();
         }
 
@@ -773,71 +763,90 @@ public abstract class WebSocketClient {
          * @throws IOException
          */
         private void verifyServerHandshake(InputStream inputStream, String secWebSocketKey) throws IOException {
-            try {
-                SessionInputBufferImpl sessionInputBuffer = new SessionInputBufferImpl(new HttpTransportMetricsImpl(),
-                        8192);
-                sessionInputBuffer.bind(inputStream);
-                HttpMessageParser<HttpResponse> parser = new DefaultHttpResponseParser(sessionInputBuffer);
-                HttpResponse response = parser.parse();
+            boolean finish = false;
+            boolean lastLineBreak = false;
+            LinkedList<String> lines = new LinkedList<String>();
 
-                StatusLine statusLine = response.getStatusLine();
-                if (statusLine == null) {
-                    throw new InvalidServerHandshakeException("There is no status line");
-                }
+            do {
+                boolean endOfLine = false;
+                StringBuilder builder = new StringBuilder();
 
-                int statusCode = statusLine.getStatusCode();
-                if (statusCode != 101) {
-                    throw new InvalidServerHandshakeException(
-                            "Invalid status code. Expected 101, received: " + statusCode);
-                }
+                do {
+                    char c = (char) inputStream.read();
+                    if (c == '\r') {
+                        c = (char) inputStream.read();
+                        if (c == '\n') {
+                            endOfLine = true;
+                            if (lastLineBreak) {
+                                finish = true;
+                            } else {
+                                lastLineBreak = true;
+                            }
+                        } else {
+                            throw new InvalidServerHandshakeException("Invalid handshake format");
+                        }
+                    } else {
+                        lastLineBreak = false;
+                        builder.append(c);
+                    }
+                } while (!endOfLine);
 
-                Header[] upgradeHeader = response.getHeaders("Upgrade");
-                if (upgradeHeader.length == 0) {
-                    throw new InvalidServerHandshakeException("There is no header named Upgrade");
-                }
-                String upgradeValue = upgradeHeader[0].getValue();
-                if (upgradeValue == null) {
-                    throw new InvalidServerHandshakeException("There is no value for header Upgrade");
-                }
-                upgradeValue = upgradeValue.toLowerCase();
-                if (!upgradeValue.equals("websocket")) {
-                    throw new InvalidServerHandshakeException(
-                            "Invalid value for header Upgrade. Expected: websocket, received: " + upgradeValue);
-                }
+                lines.add(builder.toString());
+            } while (!finish);
 
-                Header[] connectionHeader = response.getHeaders("Connection");
-                if (connectionHeader.length == 0) {
-                    throw new InvalidServerHandshakeException("There is no header named Connection");
-                }
-                String connectionValue = connectionHeader[0].getValue();
-                if (connectionValue == null) {
-                    throw new InvalidServerHandshakeException("There is no value for header Connection");
-                }
-                connectionValue = connectionValue.toLowerCase();
-                if (!connectionValue.equals("upgrade")) {
-                    throw new InvalidServerHandshakeException(
-                            "Invalid value for header Connection. Expected: upgrade, received: " + connectionValue);
-                }
+            String statusLine = lines.pollFirst();
+            if (statusLine == null) {
+                throw new InvalidServerHandshakeException("There is no status line");
+            }
 
-                Header[] secWebSocketAcceptHeader = response.getHeaders("Sec-WebSocket-Accept");
-                if (secWebSocketAcceptHeader.length == 0) {
-                    throw new InvalidServerHandshakeException("There is no header named Sec-WebSocket-Accept");
+            String[] statusLineParts = statusLine.split(" ");
+            if (statusLineParts.length > 1) {
+                String statusCode = statusLineParts[1];
+                if (!statusCode.equals("101")) {
+                    throw new InvalidServerHandshakeException("Invalid status code. Expected 101, received: " + statusCode);
                 }
-                String secWebSocketAcceptValue = secWebSocketAcceptHeader[0].getValue();
-                if (secWebSocketAcceptValue == null) {
-                    throw new InvalidServerHandshakeException("There is no value for header Sec-WebSocket-Accept");
-                }
+            } else {
+                throw new InvalidServerHandshakeException("Invalid status line format");
+            }
 
-                String keyConcatenation = secWebSocketKey + GUID;
-                byte[] sha1 = DigestUtils.sha1(keyConcatenation);
-                String secWebSocketAccept = Base64.encodeBase64String(sha1);
-                if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
-                    throw new InvalidServerHandshakeException(
-                            "Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept
-                                    + ", received: " + secWebSocketAcceptValue);
+            lines.pollLast();
+            Map<String, String> headers = new HashMap<String, String>();
+            for (String s : lines) {
+                String[] parts = s.split(":");
+                if (parts.length == 2) {
+                    headers.put(parts[0].trim(), parts[1].trim());
+                } else {
+                    throw new InvalidServerHandshakeException("Invalid headers format");
                 }
-            } catch (HttpException e) {
-                throw new InvalidServerHandshakeException(e.getMessage());
+            }
+
+            String upgradeValue = headers.get("Upgrade");
+            if (upgradeValue == null) {
+                throw new InvalidServerHandshakeException("There is no header named Upgrade");
+            }
+            upgradeValue = upgradeValue.toLowerCase();
+            if (!upgradeValue.equals("websocket")) {
+                throw new InvalidServerHandshakeException("Invalid value for header Upgrade. Expected: websocket, received: " + upgradeValue);
+            }
+
+            String connectionValue = headers.get("Connection");
+            if (connectionValue == null) {
+                throw new InvalidServerHandshakeException("There is no header named Connection");
+            }
+            connectionValue = connectionValue.toLowerCase();
+            if (!connectionValue.equals("upgrade")) {
+                throw new InvalidServerHandshakeException("Invalid value for header Connection. Expected: upgrade, received: " + connectionValue);
+            }
+
+            String secWebSocketAcceptValue = headers.get("Sec-WebSocket-Accept");
+            if (secWebSocketAcceptValue == null) {
+                throw new InvalidServerHandshakeException("There is no header named Sec-WebSocket-Accept");
+            }
+            String keyConcatenation = secWebSocketKey + GUID;
+            byte[] sha1 = DigestUtils.sha1(keyConcatenation);
+            String secWebSocketAccept = Base64.encodeBase64String(sha1);
+            if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
+                throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
             }
         }
 

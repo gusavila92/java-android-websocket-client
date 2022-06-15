@@ -948,27 +948,30 @@ public abstract class WebSocketClient {
          */
         private void read() throws IOException {
             // If message contains fragmented parts we should put it all together.
-            LinkedList<byte[]> messageParts = new LinkedList<>();
+            int opcodeFragment = -1;
+            LinkedList<byte[]> messageParts = new LinkedList<byte[]>();
 
             // The first byte of every data frame
             int firstByte;
-            int opcode = 0;
 
             // Loop until end of stream is reached.
             while ((firstByte = bis.read()) != -1) {
                 // Data contained in the first byte
+
                 // If the flag is on we have more frames for this message.
                 int fin = (firstByte << 24) >>> 31;
+
                 // int rsv1 = (firstByte << 25) >>> 31;
                 // int rsv2 = (firstByte << 26) >>> 31;
                 // int rsv3 = (firstByte << 27) >>> 31;
 
+                int opcode = (firstByte << 28) >>> 28;
+
                 // Only first frame will have real opcode (text or binary),
                 // In next frames opcode will be zero (continuation)
-                if (messageParts.isEmpty())
-                    opcode = (firstByte << 28) >>> 28;
-
-                boolean isLast = fin == 1;
+                if (fin == 0x0 && opcodeFragment == -1) {
+                    opcodeFragment = opcode;
+                }
 
                 // Reads the second byte
                 int secondByte = bis.read();
@@ -1021,29 +1024,31 @@ public abstract class WebSocketClient {
                     data[i] = b;
                 }
 
-                if (isLast) {
+                if (fin == 0x1 && opcode == OPCODE_CONTINUATION) {
+                    // This is only called for fragments so a control frame may be injected in the middle of a fragment as per specification
+
                     // If we already have some fragments, just add last and put it together
-                    if (!messageParts.isEmpty()) {
-                        messageParts.add(data);
-                        // Calculate total size of all parts
-                        int fullSize = 0;
-                        int offset = 0;
-                        for (byte[] fragment : messageParts)
-                            fullSize += fragment.length;
+                    messageParts.add(data);
+                    // Calculate total size of all parts
+                    int fullSize = 0;
+                    int offset = 0;
+                    for (byte[] fragment : messageParts)
+                        fullSize += fragment.length;
 
-                        byte[] fullMessage = new byte[fullSize];
+                    byte[] fullMessage = new byte[fullSize];
 
-                        // Copy all parts into one array
-                        for (byte[] fragment : messageParts) {
-                            System.arraycopy(fragment, 0, fullMessage, offset, fragment.length);
-                            offset += fragment.length;
-                        }
-
-                        data = fullMessage;
-                        messageParts.clear();
+                    // Copy all parts into one array
+                    for (byte[] fragment : messageParts) {
+                        System.arraycopy(fragment, 0, fullMessage, offset, fragment.length);
+                        offset += fragment.length;
                     }
-                    // else: Single framed message - do nothing
-                } else {
+
+                    data = fullMessage;
+                    messageParts.clear();
+
+                    opcode = opcodeFragment;
+                    opcodeFragment = -1;
+                } else if (fin == 0x0 && (opcode == OPCODE_CONTINUATION || opcode == OPCODE_TEXT || opcode == OPCODE_BINARY)) {
                     // Collect this fragment and go read next frame.
                     messageParts.add(data);
                     continue;
@@ -1051,10 +1056,6 @@ public abstract class WebSocketClient {
 
                 // Execute the action depending on the opcode
                 switch (opcode) {
-                    case OPCODE_CONTINUATION:
-                        // Implemented above
-                        // I think this case should never happen
-                        break;
                     case OPCODE_TEXT:
                         notifyOnTextReceived(new String(data, Charset.forName("UTF-8")));
                         break;

@@ -1,28 +1,9 @@
-plugins {
-    id "com.jfrog.bintray" version "1.7.3"
-}
 apply plugin: 'java'
 apply plugin: 'maven-publish'
+apply plugin: 'signing'
 
 sourceCompatibility = 1.6
 targetCompatibility = 1.6
-
-bintray {
-    user = System.getenv('BINTRAY_USER')
-    key = System.getenv('BINTRAY_KEY')
-    pkg {
-        repo = 'maven'
-        name = 'java-android-websocket-client'
-        version {
-	        name = '1.2.1'
-	        gpg {
-                sign = true
-                passphrase = System.getenv('BINTRAY_GPG_PASSPHRASE')
-            }
-    	}
-    }
-    publications = ['MyPublication']
-}
 
 def pomConfig = {
     licenses {
@@ -34,7 +15,7 @@ def pomConfig = {
     developers {
         developer {
             name "Gustavo Avila"
-            email System.getenv('DEVELOPER_EMAIL')
+            email "gusavila92@gmail.com"
         }
     }
     scm {
@@ -56,19 +37,28 @@ task javadocJar(type: Jar, dependsOn: javadoc) {
 
 publishing {
     publications {
-        MyPublication(MavenPublication) {
+        maven(MavenPublication) {
             from components.java
             artifact sourcesJar
             artifact javadocJar
-            groupId 'tech.gusavila92'
+            groupId 'dev.gustavoavila'
             artifactId 'java-android-websocket-client'
-            version '1.2.1'
+            version '2.0.0'
             pom.withXml {
                 def root = asNode()
                 root.appendNode('name', 'Java/Android WebSocket Client')
                 root.appendNode('description', 'A very lightweight WebSocket client library for Java/Android which aims to implement the WebSocket protocol as defined in RFC 6455')
                 root.appendNode('url', 'https://github.com/gusavila92/java-android-websocket-client')
                 root.children().last() + pomConfig
+            }
+        }
+    }
+    repositories {
+        maven {
+            url "https://s01.oss.sonatype.org/content/repositories/releases/"
+            credentials {
+                username = "gusavila92"
+                password = "$pwd"
             }
         }
     }

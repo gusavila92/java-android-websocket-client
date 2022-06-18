@@ -2,18 +2,21 @@
 A very lightweight WebSocket client library for Java/Android which aims to implement the WebSocket protocol as defined in RFC 6455.
 
 ## Download
-This library is published into JCenter and Maven Central.
+This library is published to Maven Central. Versions prior to 2.0.0 were also published to JCenter.
+
+## _dev.gustavoavila_ is now the official namespace
+Former versions were using the namespace _tech.gusavila92_ but now the official namespace starting from version 2.0.0 is _dev.gustavoavila_
 
 ### Gradle
 ```
-compile 'tech.gusavila92:java-android-websocket-client:1.2.2'
+compile 'dev.gustavoavila:java-android-websocket-client:2.0.0'
 ```
 ### Maven
 ```
 <dependency>
-  <groupId>tech.gusavila92</groupId>
+  <groupId>dev.gustavoavila</groupId>
   <artifactId>java-android-websocket-client</artifactId>
-  <version>1.2.2</version>
+  <version>2.0.0</version>
   <type>pom</type>
 </dependency>
 ```
@@ -108,33 +111,12 @@ This library supports secure and insecure WebSockets. You just need to define th
 ## Ping and Pong frames
 When a Ping frame is received, automatically a Pong frame is sent with the same Application Data of the Ping frame. You can also send Ping and Pong frames unsolicited using ```sendPing(byte[] data)``` and ```sendPong(byte[] data)```. Data can be *null* if don't want to send Application Data.
 
-## Build
-You need Gradle to build the project. Any version will do.
-```
-gradle build
-```
-
-Then you cand find a ```.jar``` file inside the ```build/libs``` folder
-### Eclipse
-If you want to open the project in Eclipse, just type
-```
-gradle eclipse
-```
-
-and Gradle will automatically generate the source files required to open the project in Eclipse.
-### IntelliJ IDEA
-If you want to open the project in IntelliJ IDEA, just type
-```
-gradle idea
-```
-
-and Gradle will automatically generate the source files required to open the project in IntelliJ IDEA.
 ## Minimum requirements
 This libary requires at minimum Java 1.6 or Android 1.6 (API 4)
 
 ## License
 
-Copyright 2017 Gustavo Avila
+Copyright 2022 Gustavo Avila
 
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.

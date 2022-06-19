@@ -12,7 +12,7 @@ Former versions were using the namespace _tech.gusavila92_ but now the official 
 compile 'dev.gustavoavila:java-android-websocket-client:2.0.0'
 ```
 ### Maven
-```
+```xml
 <dependency>
   <groupId>dev.gustavoavila</groupId>
   <artifactId>java-android-websocket-client</artifactId>
@@ -22,7 +22,7 @@ compile 'dev.gustavoavila:java-android-websocket-client:2.0.0'
 ```
 
 This is an example of how you can start a new connection.
-```
+```java
 private WebSocketClient webSocketClient;
 
 private void createWebSocketClient() {

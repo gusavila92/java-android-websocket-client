@@ -58,7 +58,7 @@ publishing {
             url "https://s01.oss.sonatype.org/content/repositories/releases/"
             credentials {
                 username = "gusavila92"
-                password = "$pwd"
+                password = "$System.env.SONATYPE_PASSWORD"
             }
         }
     }

@@ -5,8 +5,6 @@ import dev.gustavoavila.websocketclient.exceptions.IllegalSchemeException;
 import dev.gustavoavila.websocketclient.exceptions.InvalidServerHandshakeException;
 import dev.gustavoavila.websocketclient.exceptions.UnknownOpcodeException;
 import dev.gustavoavila.websocketclient.model.Payload;
-import dev.gustavoavila.apache.commons.codec.binary.Base64;
-import dev.gustavoavila.apache.commons.codec.digest.DigestUtils;
 
 import java.io.BufferedInputStream;
 import java.io.BufferedOutputStream;
@@ -16,11 +14,14 @@ import java.net.InetSocketAddress;
 import java.net.Socket;
 import java.net.URI;
 import java.nio.charset.Charset;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
 import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
+import java.util.Base64;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -681,7 +682,7 @@ public abstract class WebSocketClient {
             byte[] key = new byte[16];
             Random random = new Random();
             random.nextBytes(key);
-            String base64Key = Base64.encodeBase64String(key);
+            String base64Key = Base64.getEncoder().encodeToString(key);
 
             byte[] handshake = createHandshake(base64Key);
             bos.write(handshake);
@@ -842,11 +843,18 @@ public abstract class WebSocketClient {
             if (secWebSocketAcceptValue == null) {
                 throw new InvalidServerHandshakeException("There is no header named Sec-WebSocket-Accept");
             }
+
             String keyConcatenation = secWebSocketKey + GUID;
-            byte[] sha1 = DigestUtils.sha1(keyConcatenation);
-            String secWebSocketAccept = Base64.encodeBase64String(sha1);
-            if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
-                throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
+            try {
+                MessageDigest md = MessageDigest.getInstance("SHA-1");
+                md.update(keyConcatenation.getBytes(Charset.forName("ASCII")));
+                byte[] sha1 = md.digest();
+                String secWebSocketAccept = Base64.getEncoder().encodeToString(sha1);
+                if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
+                    throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
+                }
+            } catch (NoSuchAlgorithmException e) {
+                throw new InvalidServerHandshakeException("Your platform does not support the SHA-1 algorithm");
             }
         }
 

@@ -21,6 +21,7 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
+import java.util.Queue;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -31,6 +32,11 @@ import javax.net.ssl.SSLSocketFactory;
  * @author Gustavo Avila
  */
 public abstract class WebSocketClient {
+    /**
+     * Max number of response handshake bytes to read before raising an exception
+     */
+    private static final int MAX_HEADER_SIZE = 16392;
+
     /**
      * GUID used when processing Sec-WebSocket-Accept response header
      */
@@ -763,38 +769,48 @@ public abstract class WebSocketClient {
          * @throws IOException
          */
         private void verifyServerHandshake(InputStream inputStream, String secWebSocketKey) throws IOException {
-            boolean finish = false;
+            Queue<String> lines = new LinkedList<String>();
+            StringBuilder builder = new StringBuilder();
             boolean lastLineBreak = false;
-            LinkedList<String> lines = new LinkedList<String>();
+            int bytesRead = 0;
 
-            do {
-                boolean endOfLine = false;
-                StringBuilder builder = new StringBuilder();
-
-                do {
+            outer:do {
+                inner:do {
                     char c = (char) inputStream.read();
+                    bytesRead++;
                     if (c == '\r') {
                         c = (char) inputStream.read();
+                        bytesRead++;
                         if (c == '\n') {
-                            endOfLine = true;
                             if (lastLineBreak) {
-                                finish = true;
-                            } else {
-                                lastLineBreak = true;
+                                break outer;
                             }
+                            lastLineBreak = true;
+                            break inner;
                         } else {
                             throw new InvalidServerHandshakeException("Invalid handshake format");
                         }
+                    } else if (c == '\n') {
+                        if (lastLineBreak) {
+                            break outer;
+                        }
+                        lastLineBreak = true;
+                        break inner;
                     } else {
                         lastLineBreak = false;
                         builder.append(c);
                     }
-                } while (!endOfLine);
+                } while (bytesRead <= MAX_HEADER_SIZE);
 
-                lines.add(builder.toString());
-            } while (!finish);
+                lines.offer(builder.toString());
+                builder.setLength(0);
+            } while (bytesRead <= MAX_HEADER_SIZE);
 
-            String statusLine = lines.pollFirst();
+            if (bytesRead > MAX_HEADER_SIZE) {
+                throw new RuntimeException("Entity too large");
+            }
+
+            String statusLine = lines.poll();
             if (statusLine == null) {
                 throw new InvalidServerHandshakeException("There is no status line");
             }
@@ -809,10 +825,9 @@ public abstract class WebSocketClient {
                 throw new InvalidServerHandshakeException("Invalid status line format");
             }
 
-            lines.pollLast();
             Map<String, String> headers = new HashMap<String, String>();
             for (String s : lines) {
-                String[] parts = s.split(":");
+                String[] parts = s.split(":", 2);
                 if (parts.length == 2) {
                     headers.put(parts[0].trim(), parts[1].trim());
                 } else {

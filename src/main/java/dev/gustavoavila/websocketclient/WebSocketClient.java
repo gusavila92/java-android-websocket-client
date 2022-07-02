@@ -21,7 +21,6 @@ import java.util.HashMap;
 import java.util.LinkedList;
 import java.util.Map;
 import java.util.Random;
-import java.util.Base64;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -682,7 +681,7 @@ public abstract class WebSocketClient {
             byte[] key = new byte[16];
             Random random = new Random();
             random.nextBytes(key);
-            String base64Key = Base64.getEncoder().encodeToString(key);
+            String base64Key = Utils.encodeToBase64String(key);
 
             byte[] handshake = createHandshake(base64Key);
             bos.write(handshake);
@@ -849,12 +848,12 @@ public abstract class WebSocketClient {
                 MessageDigest md = MessageDigest.getInstance("SHA-1");
                 md.update(keyConcatenation.getBytes(Charset.forName("ASCII")));
                 byte[] sha1 = md.digest();
-                String secWebSocketAccept = Base64.getEncoder().encodeToString(sha1);
+                String secWebSocketAccept = Utils.encodeToBase64String(sha1);
                 if (!secWebSocketAcceptValue.equals(secWebSocketAccept)) {
                     throw new InvalidServerHandshakeException("Invalid value for header Sec-WebSocket-Accept. Expected: " + secWebSocketAccept + ", received: " + secWebSocketAcceptValue);
                 }
             } catch (NoSuchAlgorithmException e) {
-                throw new InvalidServerHandshakeException("Your platform does not support the SHA-1 algorithm");
+                throw new RuntimeException("Your platform does not support the SHA-1 algorithm");
             }
         }
 

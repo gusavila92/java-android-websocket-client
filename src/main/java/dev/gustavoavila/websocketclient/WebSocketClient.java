@@ -776,10 +776,20 @@ public abstract class WebSocketClient {
 
             outer:do {
                 inner:do {
-                    char c = (char) inputStream.read();
+                    int result = inputStream.read();
+                    if (result == -1) {
+                        throw new IOException("Unexpected end of stream");
+                    }
+
+                    char c = (char) result;
                     bytesRead++;
                     if (c == '\r') {
-                        c = (char) inputStream.read();
+                        result = inputStream.read();
+                        if (result == -1) {
+                            throw new IOException("Unexpected end of stream");
+                        }
+
+                        c = (char) result;
                         bytesRead++;
                         if (c == '\n') {
                             if (lastLineBreak) {

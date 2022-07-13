@@ -1,5 +1,5 @@
 # Java/Android WebSocket Client
-A very lightweight WebSocket client library for Java/Android which aims to implement the WebSocket protocol as defined in RFC 6455.
+A very lightweight WebSocket client library for JVM based clients or Android which aims to implement the WebSocket protocol as defined in RFC 6455. It has no dependencies and the _jar_ file is only 22KB.
 
 ## Download
 This library is published to Maven Central. Versions prior to 2.0.0 were also published to JCenter.
@@ -112,7 +112,7 @@ This library supports secure and insecure WebSockets. You just need to define th
 When a Ping frame is received, automatically a Pong frame is sent with the same Application Data of the Ping frame. You can also send Ping and Pong frames unsolicited using ```sendPing(byte[] data)``` and ```sendPong(byte[] data)```. Data can be *null* if don't want to send Application Data.
 
 ## Minimum requirements
-This libary requires at minimum Java 1.6 or Android 1.6 (API 4)
+This library requires at minimum Java 1.6 or Android 1.6 (API 4)
 
 ## License
 

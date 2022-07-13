@@ -132,8 +132,10 @@ public abstract class WebSocketClient {
      */
     private volatile Thread reconnectionThread;
 
-
-    private SSLSocketFactory socketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+    /**
+     * Allows to customize the SSL Socket factory instance
+     */
+    private SSLSocketFactory sslSocketFactory;
 
     /**
      * Initialize all the variables
@@ -151,11 +153,6 @@ public abstract class WebSocketClient {
         this.isRunning = false;
         this.headers = new HashMap<String, String>();
         webSocketConnection = new WebSocketConnection();
-    }
-
-
-    public void setSSLSocketFactory(SSLSocketFactory sslSocketFactory) {
-        socketFactory = sslSocketFactory;
     }
 
     /**
@@ -308,6 +305,21 @@ public abstract class WebSocketClient {
 
             this.isRunning = true;
             createAndStartConnectionThread();
+        }
+    }
+
+    /**
+     * Sets the SSL Socket factory used to create secure TCP connections
+     * @param sslSocketFactory SSLSocketFactory
+     */
+    public void setSSLSocketFactory(SSLSocketFactory sslSocketFactory) {
+        synchronized (globalLock) {
+            if (isRunning) {
+                throw new IllegalStateException("Cannot set SSLSocketFactory while WebSocketClient is running");
+            } else if (sslSocketFactory == null) {
+                throw new IllegalStateException("SSLSocketFactory cannot be null");
+            }
+            this.sslSocketFactory = sslSocketFactory;
         }
     }
 
@@ -654,7 +666,10 @@ public abstract class WebSocketClient {
                                 socket.connect(new InetSocketAddress(uri.getHost(), 80), connectTimeout);
                             }
                         } else if (scheme.equals("wss")) {
-                            socket = socketFactory.createSocket();
+                            if (sslSocketFactory == null) {
+                                sslSocketFactory = (SSLSocketFactory) SSLSocketFactory.getDefault();
+                            }
+                            socket = sslSocketFactory.createSocket();
                             socket.setSoTimeout(readTimeout);
 
                             if (port != -1) {

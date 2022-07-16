@@ -499,8 +499,11 @@ public abstract class WebSocketClient {
      * @param data Data to be sent, or null if there is no data.
      */
     public void sendPing(byte[] data) {
-        final Payload payload = new Payload(OPCODE_PING, data);
+        if (data != null && data.length > 125) {
+            throw new IllegalArgumentException("Control frame payload cannot be greater than 125 bytes");
+        }
 
+        final Payload payload = new Payload(OPCODE_PING, data);
         new Thread(new Runnable() {
             @Override
             public void run() {
@@ -515,8 +518,11 @@ public abstract class WebSocketClient {
      * @param data Data to be sent, or null if there is no data.
      */
     public void sendPong(byte[] data) {
-        final Payload payload = new Payload(OPCODE_PONG, data);
+        if (data != null && data.length > 125) {
+            throw new IllegalArgumentException("Control frame payload cannot be greater than 125 bytes");
+        }
 
+        final Payload payload = new Payload(OPCODE_PONG, data);
         new Thread(new Runnable() {
             @Override
             public void run() {

@@ -546,23 +546,31 @@ public abstract class WebSocketClient {
         }
 
         byte[] codeLength = Utils.to2ByteArray(code);
-        byte[] payload = Arrays.copyOf(codeLength, 2 + internalReason.length);
-        System.arraycopy(internalReason, 0, payload, codeLength.length, internalReason.length);
+        byte[] data = Arrays.copyOf(codeLength, 2 + internalReason.length);
+        System.arraycopy(internalReason, 0, data, codeLength.length, internalReason.length);
 
+        final Payload payload = new Payload(OPCODE_CLOSE, data);
         new Thread(new Runnable() {
             @Override
             public void run() {
-                synchronized (globalLock) {
-                    isRunning = false;
-
-                    if (reconnectionThread != null) {
-                        reconnectionThread.interrupt();
-                    }
-
-                    webSocketConnection.closeInternal();
-                }
+                webSocketConnection.sendInternal(payload);
             }
         }).start();
+
+//        new Thread(new Runnable() {
+//            @Override
+//            public void run() {
+//                synchronized (globalLock) {
+//                    isRunning = false;
+//
+//                    if (reconnectionThread != null) {
+//                        reconnectionThread.interrupt();
+//                    }
+//
+//                    webSocketConnection.closeInternal();
+//                }
+//            }
+//        }).start();
     }
 
     /**

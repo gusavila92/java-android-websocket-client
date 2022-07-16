@@ -17,11 +17,7 @@ import java.nio.charset.Charset;
 import java.security.MessageDigest;
 import java.security.NoSuchAlgorithmException;
 import java.security.SecureRandom;
-import java.util.HashMap;
-import java.util.LinkedList;
-import java.util.Map;
-import java.util.Random;
-import java.util.Queue;
+import java.util.*;
 
 import javax.net.SocketFactory;
 import javax.net.ssl.SSLSocketFactory;
@@ -32,6 +28,8 @@ import javax.net.ssl.SSLSocketFactory;
  * @author Gustavo Avila
  */
 public abstract class WebSocketClient {
+    public static final int CLOSE_CODE_NORMAL = 1000;
+
     /**
      * Max number of response handshake bytes to read before raising an exception
      */
@@ -528,7 +526,23 @@ public abstract class WebSocketClient {
     /**
      * Closes the WebSocket connection
      */
-    public void close() {
+    public void close(int code, String reason) {
+        if (code < 0 || code >= 5000) {
+            throw new IllegalArgumentException("Close frame code must be greater or equal than zero and less than 5000");
+        }
+
+        byte[] internalReason = new byte[0];
+        if (reason != null) {
+            internalReason = reason.getBytes(Charset.forName("UTF-8"));
+            if (internalReason.length > 123) {
+                throw new IllegalArgumentException("Close frame reason is too large");
+            }
+        }
+
+        byte[] codeLength = Utils.to2ByteArray(code);
+        byte[] payload = Arrays.copyOf(codeLength, 2 + internalReason.length);
+        System.arraycopy(internalReason, 0, payload, codeLength.length, internalReason.length);
+
         new Thread(new Runnable() {
             @Override
             public void run() {

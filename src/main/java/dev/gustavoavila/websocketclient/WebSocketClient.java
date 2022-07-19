@@ -532,45 +532,47 @@ public abstract class WebSocketClient {
     /**
      * Closes the WebSocket connection
      */
-    public void close(int code, String reason) {
-        if (code < 0 || code >= 5000) {
-            throw new IllegalArgumentException("Close frame code must be greater or equal than zero and less than 5000");
-        }
+    public void close(int timeout, int code, String reason) {
+        if (timeout == 0) {
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    synchronized (globalLock) {
+                        isRunning = false;
 
-        byte[] internalReason = new byte[0];
-        if (reason != null) {
-            internalReason = reason.getBytes(Charset.forName("UTF-8"));
-            if (internalReason.length > 123) {
-                throw new IllegalArgumentException("Close frame reason is too large");
+                        if (reconnectionThread != null) {
+                            reconnectionThread.interrupt();
+                        }
+
+                        webSocketConnection.closeInternal();
+                    }
+                }
+            }).start();
+        } else {
+            if (code < 0 || code >= 5000) {
+                throw new IllegalArgumentException("Close frame code must be greater or equal than zero and less than 5000");
             }
-        }
 
-        byte[] codeLength = Utils.to2ByteArray(code);
-        byte[] data = Arrays.copyOf(codeLength, 2 + internalReason.length);
-        System.arraycopy(internalReason, 0, data, codeLength.length, internalReason.length);
-
-        final Payload payload = new Payload(OPCODE_CLOSE, data);
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                webSocketConnection.sendInternal(payload);
+            byte[] internalReason = new byte[0];
+            if (reason != null) {
+                internalReason = reason.getBytes(Charset.forName("UTF-8"));
+                if (internalReason.length > 123) {
+                    throw new IllegalArgumentException("Close frame reason is too large");
+                }
             }
-        }).start();
 
-//        new Thread(new Runnable() {
-//            @Override
-//            public void run() {
-//                synchronized (globalLock) {
-//                    isRunning = false;
-//
-//                    if (reconnectionThread != null) {
-//                        reconnectionThread.interrupt();
-//                    }
-//
-//                    webSocketConnection.closeInternal();
-//                }
-//            }
-//        }).start();
+            byte[] codeLength = Utils.to2ByteArray(code);
+            byte[] data = Arrays.copyOf(codeLength, 2 + internalReason.length);
+            System.arraycopy(internalReason, 0, data, codeLength.length, internalReason.length);
+
+            final Payload payload = new Payload(OPCODE_CLOSE, data);
+            new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    webSocketConnection.sendInternal(payload);
+                }
+            }).start();
+        }
     }
 
     /**
@@ -592,9 +594,14 @@ public abstract class WebSocketClient {
         private volatile boolean isClosed;
 
         /**
+         * Flag that indicates that a close frame is in the out queue
+         */
+        private volatile boolean lastMessage;
+
+        /**
          * Data waiting to be read from the writer thread
          */
-        private final LinkedList<Payload> outBuffer;
+        private final Queue<Payload> queue;
 
         /**
          * This will act as a lock for synchronized statements
@@ -628,7 +635,8 @@ public abstract class WebSocketClient {
         private WebSocketConnection() {
             this.pendingMessages = false;
             this.isClosed = false;
-            this.outBuffer = new LinkedList<Payload>();
+            this.lastMessage = false;
+            this.queue = new LinkedList<Payload>();
             this.internalLock = new Object();
 
             this.writerThread = new Thread(new Runnable() {
@@ -649,8 +657,8 @@ public abstract class WebSocketClient {
                             if (socket.isClosed()) {
                                 return;
                             } else {
-                                while (outBuffer.size() > 0) {
-                                    Payload payload = outBuffer.removeFirst();
+                                while (queue.size() > 0) {
+                                    Payload payload = queue.poll();
                                     int opcode = payload.getOpcode();
                                     byte[] data = payload.getData();
 
@@ -1180,9 +1188,14 @@ public abstract class WebSocketClient {
          */
         private void sendInternal(Payload payload) {
             synchronized (internalLock) {
-                outBuffer.addLast(payload);
-                pendingMessages = true;
-                internalLock.notify();
+                if (!lastMessage) {
+                    if (payload.getOpcode() == OPCODE_CLOSE) {
+                        lastMessage = true;
+                    }
+                    queue.offer(payload);
+                    pendingMessages = true;
+                    internalLock.notify();
+                }
             }
         }
 

@@ -18,14 +18,20 @@ public class Payload {
 	private byte[] data;
 
 	/**
+	 * This is true if a close frame was previously received and this payload represents the echo
+	 */
+	private boolean isCloseEcho;
+
+	/**
 	 * Initializes the variables
 	 * 
 	 * @param opcode
 	 * @param data
 	 */
-	public Payload(int opcode, byte[] data) {
+	public Payload(int opcode, byte[] data, boolean isCloseEcho) {
 		this.opcode = opcode;
 		this.data = data;
+		this.isCloseEcho = isCloseEcho;
 	}
 
 	/**
@@ -44,5 +50,9 @@ public class Payload {
 	 */
 	public byte[] getData() {
 		return data;
+	}
+
+	public boolean isCloseEcho() {
+		return isCloseEcho;
 	}
 }

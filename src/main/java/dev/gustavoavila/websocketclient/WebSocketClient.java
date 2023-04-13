@@ -906,13 +906,13 @@ public abstract class WebSocketClient {
             for (String s : lines) {
                 String[] parts = s.split(":", 2);
                 if (parts.length == 2) {
-                    headers.put(parts[0].trim(), parts[1].trim());
+                    headers.put(parts[0].trim().toLowerCase(), parts[1].trim());
                 } else {
                     throw new InvalidServerHandshakeException("Invalid headers format");
                 }
             }
 
-            String upgradeValue = headers.get("Upgrade");
+            String upgradeValue = headers.get("upgrade");
             if (upgradeValue == null) {
                 throw new InvalidServerHandshakeException("There is no header named Upgrade");
             }
@@ -921,7 +921,7 @@ public abstract class WebSocketClient {
                 throw new InvalidServerHandshakeException("Invalid value for header Upgrade. Expected: websocket, received: " + upgradeValue);
             }
 
-            String connectionValue = headers.get("Connection");
+            String connectionValue = headers.get("connection");
             if (connectionValue == null) {
                 throw new InvalidServerHandshakeException("There is no header named Connection");
             }
@@ -930,7 +930,7 @@ public abstract class WebSocketClient {
                 throw new InvalidServerHandshakeException("Invalid value for header Connection. Expected: upgrade, received: " + connectionValue);
             }
 
-            String secWebSocketAcceptValue = headers.get("Sec-WebSocket-Accept");
+            String secWebSocketAcceptValue = headers.get("sec-websocket-accept");
             if (secWebSocketAcceptValue == null) {
                 throw new InvalidServerHandshakeException("There is no header named Sec-WebSocket-Accept");
             }

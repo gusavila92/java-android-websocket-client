@@ -9,14 +9,14 @@ Former versions were using the namespace _tech.gusavila92_ but now the official 
 
 ### Gradle
 ```
-compile 'dev.gustavoavila:java-android-websocket-client:2.0.1'
+compile 'dev.gustavoavila:java-android-websocket-client:2.0.2'
 ```
 ### Maven
 ```xml
 <dependency>
   <groupId>dev.gustavoavila</groupId>
   <artifactId>java-android-websocket-client</artifactId>
-  <version>2.0.1</version>
+  <version>2.0.2</version>
   <type>pom</type>
 </dependency>
 ```

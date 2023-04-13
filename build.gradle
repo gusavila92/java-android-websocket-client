@@ -43,7 +43,7 @@ publishing {
             artifact javadocJar
             groupId 'dev.gustavoavila'
             artifactId 'java-android-websocket-client'
-            version '2.0.1'
+            version '2.0.2'
             pom.withXml {
                 def root = asNode()
                 root.appendNode('name', 'Java/Android WebSocket Client')
